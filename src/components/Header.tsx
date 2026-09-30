@@ -15,7 +15,7 @@ export function Header() {
           </div>
         </div>
         <p className="hidden sm:block text-sm text-[--color-text-muted]">
-          Updated every 20 minutes
+          Updated twice daily
         </p>
       </div>
     </header>

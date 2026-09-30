@@ -9,7 +9,7 @@ A curated AI news feed for non-technical professionals who want to keep up with 
 - **Beginner-friendly sources:** Curated YouTube channels and Reddit communities focused on practical AI for everyday users
 - **Plain-English summaries:** Every item includes a one-line "what this means for you" summary powered by AI
 - **Smart filtering:** Filter by source type (Videos/Discussions), sort by Latest or Popular, filter by tags
-- **Auto-updated:** New content pulled every 20 minutes via scheduled Edge Functions
+- **Auto-updated:** New content pulled twice daily (8am & 8pm HKT) via scheduled Edge Functions
 - **Mobile-first design:** Dark theme UI optimized for all devices
 
 ## Architecture
@@ -28,11 +28,11 @@ A curated AI news feed for non-technical professionals who want to keep up with 
                                 │              │  Reddit API      │
                                 │              │  OpenRouter      │
                                 ▼              └──────────────────┘
-                         pg_cron (*/20 min)
+                         pg_cron (twice daily)
 ```
 
 **Data Flow:**
-1. `pg_cron` triggers the `ingest` Edge Function every 20 minutes
+1. `pg_cron` triggers the `ingest` Edge Function twice daily (00:00 and 12:00 UTC)
 2. Edge Function fetches RSS feeds from YouTube channels
 3. Edge Function fetches posts from Reddit (JSON API with OAuth fallback to RSS)
 4. New items are upserted to `feed_items` table (dedupe on URL)
@@ -140,6 +140,7 @@ Migrations:
 - `20260930000001_seed_sources.sql` - Default YouTube channels and subreddits
 - `20260930000002_setup_ingest_cron.sql` - pg_cron job for scheduled ingestion (uses `net.http_post`)
 - `20260930000003_add_hidden_column.sql` - Adds `hidden` column to filter low-relevance items
+- `20260930000004_update_cron_schedule.sql` - Updates schedule to twice daily (00:00 and 12:00 UTC)
 
 ### 3. Add Vault Secrets
 
