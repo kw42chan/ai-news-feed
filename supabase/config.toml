@@ -1,0 +1,28 @@
+# Supabase configuration
+# Run `supabase link --project-ref gmfzwuunaqzutbhudsxn` to link to the remote project
+
+[project]
+id = "gmfzwuunaqzutbhudsxn"
+name = "ai-news-feed"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+
+[functions]
+verify_jwt = true
