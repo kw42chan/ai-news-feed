@@ -43,7 +43,7 @@ A curated AI news feed for non-technical professionals who want to keep up with 
 
 - **Frontend:** Vite + React + TypeScript + Tailwind CSS 4 + Lucide React
 - **Backend:** Supabase (PostgreSQL + Edge Functions + pg_cron)
-- **AI:** OpenRouter (configurable model, default: gemini-2.0-flash-lite)
+- **AI:** OpenRouter (configurable model, default: `qwen/qwen3-vl-32b-instruct`)
 - **Hosting:** Vercel (frontend), Supabase (backend)
 
 ## Local Development
@@ -95,14 +95,29 @@ These are stored in Supabase Vault and accessed by the Edge Function:
 | Secret Name | Description | Required |
 |-------------|-------------|----------|
 | `OPENROUTER_API_KEY` | OpenRouter API key for AI summaries | Yes |
-| `OPENROUTER_MODEL` | OpenRouter model ID (default: `google/gemini-2.0-flash-lite-001`) | No |
-| `REDDIT_CLIENT_ID` | Reddit API OAuth client ID | No* |
-| `REDDIT_CLIENT_SECRET` | Reddit API OAuth secret | No* |
-| `INGEST_CRON_SECRET` | Auto-generated secret for cron auth | Auto |
+| `OPENROUTER_MODEL` | OpenRouter model ID (see below) | No |
+| `REDDIT_CLIENT_ID` | Reddit API OAuth client ID | Recommended* |
+| `REDDIT_CLIENT_SECRET` | Reddit API OAuth secret | Recommended* |
+| `INGEST_CRON_SECRET` | Secret for cron auth (auto-generated if missing) | Yes |
 | `SUPABASE_URL` | Project URL (for cron job) | Yes |
-| `SUPABASE_ANON_KEY` | Anon key (for cron job) | Yes |
+| `SUPABASE_ANON_KEY` | Legacy anon JWT key (for cron job) | Yes |
 
-*Reddit often blocks requests from datacenter IPs. If you see 403/429 errors in ingest runs, create a Reddit API app and add OAuth credentials.
+*Reddit blocks most datacenter IPs by default. Reddit OAuth credentials are strongly recommended. See [Reddit API Setup](#reddit-api-setup) below.
+
+### OpenRouter Model Selection
+
+The default model is `qwen/qwen3-vl-32b-instruct`, which works globally.
+
+**Regional Caveat:** Google and OpenAI models on OpenRouter may return HTTP 403 (Terms of Service violation) when called from certain regions, including Hong Kong and other locations where Supabase Edge Functions may run. If you encounter 403 errors:
+
+1. Check which region your Supabase project is in
+2. Use a model that works in that region (Qwen, Claude, Mistral, etc.)
+3. Override the default by adding `OPENROUTER_MODEL` to Vault:
+
+```sql
+SELECT vault.create_secret('qwen/qwen3-vl-32b-instruct', 'OPENROUTER_MODEL');
+-- Or use another model like 'anthropic/claude-3-haiku', 'mistralai/mistral-small', etc.
+```
 
 ## Supabase Setup
 
@@ -123,7 +138,8 @@ supabase db push
 Migrations:
 - `20260930000000_init_feed_schema.sql` - Tables, indexes, RLS policies
 - `20260930000001_seed_sources.sql` - Default YouTube channels and subreddits
-- `20260930000002_setup_ingest_cron.sql` - pg_cron job for scheduled ingestion
+- `20260930000002_setup_ingest_cron.sql` - pg_cron job for scheduled ingestion (uses `net.http_post`)
+- `20260930000003_add_hidden_column.sql` - Adds `hidden` column to filter low-relevance items
 
 ### 3. Add Vault Secrets
 
@@ -178,17 +194,36 @@ Add these in Vercel project settings:
 
 Push to main or click Deploy in Vercel dashboard.
 
-## Reddit API Caveat
+## Reddit API Setup
 
-Reddit frequently blocks requests from datacenter IPs (common with serverless functions). If ingestion shows 403/429 errors for Reddit sources:
+Reddit blocks requests from most datacenter IPs by default, including Supabase Edge Functions. You will see 403 errors for Reddit sources without OAuth credentials.
 
-1. Create a Reddit "script" app at https://www.reddit.com/prefs/apps
-2. Add credentials to Supabase Vault:
+**To enable Reddit ingestion:**
+
+1. **Create a Reddit App:**
+   - Go to https://www.reddit.com/prefs/apps
+   - Click "create another app..." at the bottom
+   - Select **"script"** as the app type
+   - Name: `ai-news-feed` (or any name)
+   - Redirect URI: `http://localhost` (not used for script apps)
+   - Click "create app"
+
+2. **Get your credentials:**
+   - **Client ID:** The string under "personal use script" (e.g., `abc123XYZ`)
+   - **Client Secret:** The "secret" field
+
+3. **Add to Supabase Vault:**
    ```sql
    SELECT vault.create_secret('your-client-id', 'REDDIT_CLIENT_ID');
    SELECT vault.create_secret('your-client-secret', 'REDDIT_CLIENT_SECRET');
    ```
-3. The Edge Function will automatically use OAuth when credentials are present
+
+4. **Redeploy the function** (if already deployed):
+   ```bash
+   supabase functions deploy ingest --verify-jwt
+   ```
+
+The Edge Function will automatically use OAuth (`oauth.reddit.com`) when credentials are present, which bypasses the IP-based blocking.
 
 ## Default Sources
 

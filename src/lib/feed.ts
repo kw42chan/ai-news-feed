@@ -16,6 +16,9 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
   let query = supabase
     .from('feed_items')
     .select('*')
+    // Only show items with summaries that aren't hidden (RLS also enforces this)
+    .eq('hidden', false)
+    .not('summary', 'is', null)
 
   if (sourceIds && sourceIds.length > 0) {
     query = query.in('source_id', sourceIds)

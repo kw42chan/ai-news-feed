@@ -30,6 +30,7 @@ export interface FeedItem {
   summary_model: string | null
   summarized_at: string | null
   tags: string[]
+  hidden: boolean
   created_at: string
   updated_at: string
 }

@@ -13,6 +13,10 @@ const VALID_TAGS = [
 const MAX_SUMMARIES_PER_RUN = 40;
 const SUMMARY_CONCURRENCY = 5;
 
+// Default model: qwen works globally; Google/OpenAI models may return 403 in some regions (e.g. Hong Kong)
+// Override via OPENROUTER_MODEL Vault secret
+const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-vl-32b-instruct";
+
 interface Source {
   id: string;
   kind: "youtube" | "reddit" | "x";
@@ -46,6 +50,26 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-cron-secret, content-type",
 };
 
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&apos;": "'",
+  "&#x27;": "'",
+  "&#x2F;": "/",
+  "&#47;": "/",
+  "&nbsp;": " ",
+};
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&[#\w]+;/g, (entity) => HTML_ENTITIES[entity] || entity)
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 async function getAppSecret(
   supabase: ReturnType<typeof createClient>,
   secretName: string
@@ -74,10 +98,9 @@ async function fetchYouTubeFeed(channelId: string): Promise<FeedItem[]> {
   const items: FeedItem[] = [];
 
   const channelNameMatch = xml.match(/<name>([^<]+)<\/name>/);
-  const channelName = channelNameMatch ? channelNameMatch[1] : "Unknown";
+  const channelName = channelNameMatch ? decodeHtmlEntities(channelNameMatch[1]) : "Unknown";
 
-  const entryRegex =
-    /<entry>([\s\S]*?)<\/entry>/g;
+  const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
   let entryMatch;
 
   while ((entryMatch = entryRegex.exec(xml)) !== null) {
@@ -88,18 +111,13 @@ async function fetchYouTubeFeed(channelId: string): Promise<FeedItem[]> {
     const publishedMatch = entry.match(/<published>([^<]+)<\/published>/);
     const authorMatch = entry.match(/<name>([^<]+)<\/name>/);
     const linkMatch = entry.match(/<link[^>]+href="([^"]+)"/);
-    const thumbnailMatch = entry.match(
-      /<media:thumbnail[^>]+url="([^"]+)"/
-    );
-    const viewsMatch = entry.match(
-      /<media:statistics[^>]+views="(\d+)"/
-    );
+    const thumbnailMatch = entry.match(/<media:thumbnail[^>]+url="([^"]+)"/);
+    const viewsMatch = entry.match(/<media:statistics[^>]+views="(\d+)"/);
 
     if (videoIdMatch && titleMatch && publishedMatch) {
       const videoId = videoIdMatch[1];
-      const url =
-        linkMatch?.[1] || `https://www.youtube.com/watch?v=${videoId}`;
-      
+      const url = linkMatch?.[1] || `https://www.youtube.com/watch?v=${videoId}`;
+
       // Skip Shorts (URL contains /shorts/)
       if (url.includes("/shorts/")) {
         continue;
@@ -107,14 +125,12 @@ async function fetchYouTubeFeed(channelId: string): Promise<FeedItem[]> {
 
       items.push({
         source: "youtube",
-        source_id: "", // Will be set later
+        source_id: "",
         source_name: channelName,
-        author: authorMatch?.[1] || channelName,
-        title: titleMatch[1],
+        author: authorMatch ? decodeHtmlEntities(authorMatch[1]) : channelName,
+        title: decodeHtmlEntities(titleMatch[1]),
         url,
-        thumbnail:
-          thumbnailMatch?.[1] ||
-          `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        thumbnail: thumbnailMatch?.[1] || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         published_at: publishedMatch[1],
         engagement_score: viewsMatch ? parseInt(viewsMatch[1], 10) : 0,
       });
@@ -130,18 +146,15 @@ async function getRedditOAuthToken(
 ): Promise<string | null> {
   try {
     const credentials = btoa(`${clientId}:${clientSecret}`);
-    const response = await fetch(
-      "https://www.reddit.com/api/v1/access_token",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "web:ai-news-feed:v0.1 (by /u/ai-news-feed-bot)",
-        },
-        body: "grant_type=client_credentials",
-      }
-    );
+    const response = await fetch("https://www.reddit.com/api/v1/access_token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "web:ai-news-feed:v0.1 (by /u/ai-news-feed-bot)",
+      },
+      body: "grant_type=client_credentials",
+    });
 
     if (!response.ok) {
       console.error("Reddit OAuth failed:", response.status);
@@ -161,11 +174,10 @@ async function fetchRedditFeed(
   oauthToken?: string | null
 ): Promise<{ items: FeedItem[]; error?: string }> {
   const userAgent = "web:ai-news-feed:v0.1 (by /u/ai-news-feed-bot)";
-  let response: Response;
+  let response: Response | undefined;
   let useOAuth = false;
 
   if (oauthToken) {
-    // Try OAuth endpoint first
     try {
       response = await fetch(
         `https://oauth.reddit.com/r/${subreddit}/hot.json?limit=15`,
@@ -183,16 +195,12 @@ async function fetchRedditFeed(
   }
 
   if (!useOAuth) {
-    // Try public JSON endpoint
     response = await fetch(
       `https://www.reddit.com/r/${subreddit}/hot.json?limit=15`,
-      {
-        headers: { "User-Agent": userAgent },
-      }
+      { headers: { "User-Agent": userAgent } }
     );
 
     if (!response.ok) {
-      // Try RSS as fallback
       const rssResponse = await fetch(
         `https://www.reddit.com/r/${subreddit}/.rss`,
         { headers: { "User-Agent": userAgent } }
@@ -201,11 +209,10 @@ async function fetchRedditFeed(
       if (!rssResponse.ok) {
         return {
           items: [],
-          error: `Reddit blocked (${response.status}). Consider adding REDDIT_CLIENT_ID/SECRET.`,
+          error: `Reddit blocked (${response.status}). Add REDDIT_CLIENT_ID/SECRET to Vault for OAuth access.`,
         };
       }
 
-      // Parse RSS fallback
       const xml = await rssResponse.text();
       const items: FeedItem[] = [];
       const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
@@ -224,7 +231,7 @@ async function fetchRedditFeed(
             source_id: "",
             source_name: `r/${subreddit}`,
             author: authorMatch?.[1]?.replace("/u/", "") || null,
-            title: titleMatch[1],
+            title: decodeHtmlEntities(titleMatch[1]),
             url: linkMatch[1],
             thumbnail: null,
             published_at: updatedMatch[1],
@@ -245,7 +252,6 @@ async function fetchRedditFeed(
     for (const post of posts) {
       const p = post.data;
 
-      // Skip stickied, NSFW, or removed posts
       if (p.stickied || p.over_18 || p.removed_by_category) {
         continue;
       }
@@ -255,7 +261,7 @@ async function fetchRedditFeed(
         source_id: "",
         source_name: `r/${subreddit}`,
         author: p.author || null,
-        title: p.title,
+        title: decodeHtmlEntities(p.title || ""),
         url: `https://www.reddit.com${p.permalink}`,
         thumbnail: p.thumbnail?.startsWith("http") ? p.thumbnail : null,
         published_at: new Date(p.created_utc * 1000).toISOString(),
@@ -289,24 +295,21 @@ Respond in JSON only:
 {"summary": "...", "tags": ["...", "..."], "relevant": true/false}`;
 
   try {
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://ai-news-feed.vercel.app",
-          "X-Title": "AI News Feed",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.3,
-          max_tokens: 200,
-        }),
-      }
-    );
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ai-news-feed.vercel.app",
+        "X-Title": "AI News Feed",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+        max_tokens: 200,
+      }),
+    });
 
     if (!response.ok) {
       console.error("OpenRouter error:", response.status, await response.text());
@@ -318,15 +321,13 @@ Respond in JSON only:
 
     if (!content) return null;
 
-    // Parse JSON defensively
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 
     const parsed = JSON.parse(jsonMatch[0]);
-    
-    // Filter tags to only valid ones
+
     const validTags = (parsed.tags || []).filter((t: string) =>
-      VALID_TAGS.includes(t as typeof VALID_TAGS[number])
+      VALID_TAGS.includes(t as (typeof VALID_TAGS)[number])
     );
 
     return {
@@ -351,8 +352,17 @@ async function processSummariesInBatches<T>(
   }
 }
 
+function dedupeByUrl(items: FeedItem[]): FeedItem[] {
+  const seen = new Map<string, FeedItem>();
+  for (const item of items) {
+    if (!seen.has(item.url)) {
+      seen.set(item.url, item);
+    }
+  }
+  return Array.from(seen.values());
+}
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -363,44 +373,46 @@ Deno.serve(async (req) => {
   const details: Record<string, unknown> = { sources: {} };
 
   try {
-    // Initialize Supabase client with service role
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify cron secret if present (cron calls include it, manual calls may not)
+    // Security: ALWAYS require cron secret header, fail closed if missing
     const cronSecret = req.headers.get("x-cron-secret");
-    if (cronSecret) {
-      const expectedSecret = await getAppSecret(supabase, "INGEST_CRON_SECRET");
-      if (expectedSecret && cronSecret !== expectedSecret) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
-    // Get OpenRouter config
-    const openRouterKey = await getAppSecret(supabase, "OPENROUTER_API_KEY");
-    const openRouterModel =
-      (await getAppSecret(supabase, "OPENROUTER_MODEL")) ||
-      "google/gemini-2.0-flash-lite-001";
-
-    // Get Reddit OAuth credentials if available
-    const redditClientId = await getAppSecret(supabase, "REDDIT_CLIENT_ID");
-    const redditClientSecret = await getAppSecret(
-      supabase,
-      "REDDIT_CLIENT_SECRET"
-    );
-    let redditOAuthToken: string | null = null;
-    if (redditClientId && redditClientSecret) {
-      redditOAuthToken = await getRedditOAuthToken(
-        redditClientId,
-        redditClientSecret
+    if (!cronSecret) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: x-cron-secret header required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Fetch enabled sources
+    const expectedSecret = await getAppSecret(supabase, "INGEST_CRON_SECRET");
+    if (!expectedSecret) {
+      console.error("INGEST_CRON_SECRET not configured in Vault");
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: cron secret not found" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (cronSecret !== expectedSecret) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: invalid cron secret" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const openRouterKey = await getAppSecret(supabase, "OPENROUTER_API_KEY");
+    const openRouterModel =
+      (await getAppSecret(supabase, "OPENROUTER_MODEL")) || DEFAULT_OPENROUTER_MODEL;
+
+    const redditClientId = await getAppSecret(supabase, "REDDIT_CLIENT_ID");
+    const redditClientSecret = await getAppSecret(supabase, "REDDIT_CLIENT_SECRET");
+    let redditOAuthToken: string | null = null;
+    if (redditClientId && redditClientSecret) {
+      redditOAuthToken = await getRedditOAuthToken(redditClientId, redditClientSecret);
+    }
+
     const { data: sources, error: sourcesError } = await supabase
       .from("sources")
       .select("*")
@@ -410,7 +422,6 @@ Deno.serve(async (req) => {
 
     const allItems: FeedItem[] = [];
 
-    // Process each source
     for (const source of sources as Source[]) {
       const sourceDetails: Record<string, unknown> = {};
 
@@ -421,28 +432,22 @@ Deno.serve(async (req) => {
         if (source.kind === "youtube") {
           items = await fetchYouTubeFeed(source.external_id);
         } else if (source.kind === "reddit") {
-          const result = await fetchRedditFeed(
-            source.external_id,
-            redditOAuthToken
-          );
+          const result = await fetchRedditFeed(source.external_id, redditOAuthToken);
           items = result.items;
           sourceError = result.error;
         }
 
-        // Set source_id for all items
         items = items.map((item) => ({ ...item, source_id: source.id }));
         allItems.push(...items);
 
         sourceDetails.fetched = items.length;
         if (sourceError) {
           sourceDetails.error = sourceError;
-          // Update source with error
           await supabase
             .from("sources")
             .update({ last_error: sourceError, last_fetched_at: new Date().toISOString() })
             .eq("id", source.id);
         } else {
-          // Clear any previous error
           await supabase
             .from("sources")
             .update({ last_error: null, last_fetched_at: new Date().toISOString() })
@@ -456,42 +461,51 @@ Deno.serve(async (req) => {
           .eq("id", source.id);
       }
 
-      details.sources[source.name] = sourceDetails;
+      (details.sources as Record<string, unknown>)[source.name] = sourceDetails;
     }
 
-    // Upsert all items
-    if (allItems.length > 0) {
-      const { data: upserted, error: upsertError } = await supabase
+    // Dedupe by URL before upsert to avoid "ON CONFLICT cannot affect row a second time"
+    const dedupedItems = dedupeByUrl(allItems);
+
+    if (dedupedItems.length > 0) {
+      // Get existing URLs to count truly new items
+      const urls = dedupedItems.map((item) => item.url);
+      const { data: existingItems } = await supabase
         .from("feed_items")
-        .upsert(
-          allItems.map((item) => ({
-            source: item.source,
-            source_id: item.source_id,
-            source_name: item.source_name,
-            author: item.author,
-            title: item.title,
-            url: item.url,
-            thumbnail: item.thumbnail,
-            published_at: item.published_at,
-            engagement_score: item.engagement_score,
-          })),
-          { onConflict: "url", ignoreDuplicates: false }
-        )
-        .select("id, url");
+        .select("url")
+        .in("url", urls);
+
+      const existingUrls = new Set((existingItems || []).map((i) => i.url));
+      const trulyNewCount = dedupedItems.filter((item) => !existingUrls.has(item.url)).length;
+
+      const { error: upsertError } = await supabase.from("feed_items").upsert(
+        dedupedItems.map((item) => ({
+          source: item.source,
+          source_id: item.source_id,
+          source_name: item.source_name,
+          author: item.author,
+          title: item.title,
+          url: item.url,
+          thumbnail: item.thumbnail,
+          published_at: item.published_at,
+          engagement_score: item.engagement_score,
+        })),
+        { onConflict: "url", ignoreDuplicates: false }
+      );
 
       if (upsertError) {
         console.error("Upsert error:", upsertError);
       } else {
-        itemsNew = upserted?.length || 0;
+        itemsNew = trulyNewCount;
       }
     }
 
-    // Generate summaries for items without them
     if (openRouterKey) {
       const { data: unsummarized } = await supabase
         .from("feed_items")
         .select("id, title, source_name")
         .is("summary", null)
+        .eq("hidden", false)
         .order("created_at", { ascending: false })
         .limit(MAX_SUMMARIES_PER_RUN);
 
@@ -518,11 +532,11 @@ Deno.serve(async (req) => {
                 .eq("id", item.id);
               itemsSummarized++;
             } else if (result && result.relevant === false) {
-              // Mark irrelevant content
+              // Hide irrelevant content instead of using placeholder summary
               await supabase
                 .from("feed_items")
                 .update({
-                  summary: "(filtered as low-relevance)",
+                  hidden: true,
                   summary_model: openRouterModel,
                   summarized_at: new Date().toISOString(),
                 })
@@ -536,7 +550,6 @@ Deno.serve(async (req) => {
       details.warning = "OPENROUTER_API_KEY not configured, skipping summaries";
     }
 
-    // Record ingest run
     const finishedAt = new Date().toISOString();
     await supabase.from("ingest_runs").insert({
       started_at: new Date(startTime).toISOString(),
@@ -555,14 +568,11 @@ Deno.serve(async (req) => {
         durationMs: Date.now() - startTime,
         details,
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Ingest error:", error);
 
-    // Try to record failed run
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -580,12 +590,9 @@ Deno.serve(async (req) => {
       // Ignore logging errors
     }
 
-    return new Response(
-      JSON.stringify({ error: String(error) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: String(error) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
