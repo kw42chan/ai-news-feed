@@ -23,12 +23,20 @@ export function FilterBar({
 }: FilterBarProps) {
   return (
     <div>
-      <div className="flex items-center justify-between gap-[--space-6] flex-wrap mb-[--space-6]">
-        <h2 id="feed-title" className="m-0 text-[--text-2xl] leading-[1.33] font-semibold tracking-tight">
+      <div className="flex items-center justify-between gap-6 flex-wrap mb-6">
+        <h2 
+          id="feed-title" 
+          className="m-0 text-2xl font-semibold"
+          style={{ lineHeight: 1.33, letterSpacing: '-0.02em', color: '#0F172A' }}
+        >
           Latest stories
         </h2>
         <div
-          className="inline-flex p-1 gap-1 bg-[--color-surface-muted] border border-[--color-border] rounded-[--radius-md]"
+          className="inline-flex p-1 gap-1 rounded-xl"
+          style={{ 
+            background: '#F1F5F9', 
+            border: '1px solid #E2E8F0',
+          }}
           role="group"
           aria-label="Sort"
         >
@@ -37,13 +45,16 @@ export function FilterBar({
               key={option.value}
               onClick={() => onSortChange(option.value)}
               aria-pressed={sort === option.value}
-              className={`inline-flex items-center gap-[--space-2] h-8 px-[--space-3] border-0 rounded-[--radius-sm] text-[--text-sm] font-medium cursor-pointer transition-all duration-[--dur] ${
-                sort === option.value
-                  ? 'bg-[--color-surface] text-[--color-text] shadow-[--shadow-sm]'
-                  : 'bg-transparent text-[--color-text-secondary] hover:text-[--color-text]'
+              className={`seg-btn inline-flex items-center gap-2 h-8 px-3 border-0 rounded-lg text-sm font-medium cursor-pointer ${
+                sort === option.value ? 'seg-btn-active' : ''
               }`}
+              style={{ 
+                background: sort === option.value ? '#FFFFFF' : 'transparent',
+                color: sort === option.value ? '#0F172A' : '#475569',
+                boxShadow: sort === option.value ? '0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 6px rgba(15, 23, 42, 0.04)' : 'none',
+              }}
             >
-              <span className={sort === option.value ? 'text-[--color-accent]' : ''}>
+              <span style={{ color: sort === option.value ? '#4F46E5' : 'inherit' }}>
                 {option.icon}
               </span>
               {option.label}
@@ -53,21 +64,25 @@ export function FilterBar({
       </div>
 
       {availableTags.length > 0 && (
-        <div className="flex flex-wrap gap-[--space-2] mb-[--space-8]" role="group" aria-label="Filter by topic">
-          {availableTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => onTagToggle(tag)}
-              aria-pressed={selectedTags.includes(tag)}
-              className={`h-8 px-[--space-4] rounded-[--radius-pill] border text-[--text-sm] font-medium cursor-pointer transition-all duration-[--dur] focus-visible:rounded-[--radius-pill] ${
-                selectedTags.includes(tag)
-                  ? 'bg-[--color-accent-soft] border-[--color-accent-border] text-[--color-accent-hover]'
-                  : 'bg-[--color-surface] border-[--color-border] text-[--color-text-secondary] hover:border-[--color-accent-border] hover:text-[--color-accent]'
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2 mb-8" role="group" aria-label="Filter by topic">
+          {availableTags.map((tag) => {
+            const isActive = selectedTags.includes(tag)
+            return (
+              <button
+                key={tag}
+                onClick={() => onTagToggle(tag)}
+                aria-pressed={isActive}
+                className={`chip h-8 px-4 rounded-full text-sm font-medium cursor-pointer ${isActive ? 'chip-active' : ''}`}
+                style={{ 
+                  background: isActive ? '#EEF2FF' : '#FFFFFF',
+                  border: `1px solid ${isActive ? '#C7D2FE' : '#E2E8F0'}`,
+                  color: isActive ? '#4338CA' : '#475569',
+                }}
+              >
+                {tag}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

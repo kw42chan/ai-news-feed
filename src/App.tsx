@@ -88,13 +88,13 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[--color-bg]">
+    <div className="min-h-screen" style={{ background: '#F8FAFC' }}>
       <Header />
       
       <main id="top">
         {/* Hero section */}
         <section
-          className="relative py-[--space-20] pb-[--space-16] max-sm:py-[--space-12] max-sm:pb-[--space-10]"
+          className="relative py-20 pb-16 max-sm:py-12 max-sm:pb-10"
           style={{
             background: `
               radial-gradient(900px 380px at 12% -10%, rgba(79, 70, 229, 0.07), transparent 70%),
@@ -102,14 +102,30 @@ function App() {
             `,
           }}
         >
-          <div className="max-w-[--container] mx-auto px-[--space-6] max-sm:px-[--space-5]">
-            <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-[--space-16] items-center max-lg:grid-cols-1 max-lg:gap-[--space-10]">
+          <div className="max-w-[1160px] mx-auto px-6 max-sm:px-5">
+            <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-16 items-center max-lg:grid-cols-1 max-lg:gap-10">
               <div>
                 <LastUpdated timestamp={lastUpdated} />
-                <h1 className="mt-[--space-6] mb-[--space-5] max-sm:mt-[--space-5] max-sm:mb-[--space-4] text-[clamp(2.25rem,1.6rem+2.6vw,3.5rem)] leading-[1.06] tracking-[-0.035em] font-bold" style={{ textWrap: 'balance' }}>
-                  AI news for busy professionals, <span className="text-[--color-accent]">in plain English</span>
+                <h1 
+                  className="mt-6 mb-5 max-sm:mt-5 max-sm:mb-4 font-bold"
+                  style={{ 
+                    fontSize: 'clamp(2.25rem, 1.6rem + 2.6vw, 3.5rem)',
+                    lineHeight: 1.06,
+                    letterSpacing: '-0.035em',
+                    textWrap: 'balance',
+                    color: '#0F172A',
+                  }}
+                >
+                  AI news for busy professionals, <span style={{ color: '#4F46E5' }}>in plain English</span>
                 </h1>
-                <p className="m-0 text-[--text-lg] max-sm:text-[--text-base] leading-[1.6] text-[--color-text-secondary] max-w-[34rem] max-lg:max-w-[40rem]" style={{ textWrap: 'pretty' }}>
+                <p 
+                  className="m-0 text-lg max-sm:text-base max-w-[34rem] max-lg:max-w-[40rem]"
+                  style={{ 
+                    lineHeight: 1.6, 
+                    color: '#475569',
+                    textWrap: 'pretty',
+                  }}
+                >
                   The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
                 </p>
               </div>
@@ -120,8 +136,8 @@ function App() {
         </section>
 
         {/* Feed section */}
-        <section id="feed" aria-labelledby="feed-title" className="py-[--space-12] pb-[--space-24] max-sm:py-[--space-8] max-sm:pb-[--space-16]">
-          <div className="max-w-[--container] mx-auto px-[--space-6] max-sm:px-[--space-5]">
+        <section id="feed" aria-labelledby="feed-title" className="py-12 pb-24 max-sm:py-8 max-sm:pb-16">
+          <div className="max-w-[1160px] mx-auto px-6 max-sm:px-5">
             <FilterBar
               sort={sort}
               selectedTags={selectedTags}

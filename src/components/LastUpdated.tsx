@@ -25,12 +25,20 @@ export function LastUpdated({ timestamp }: LastUpdatedProps) {
 
   return (
     <span
-      className="inline-flex items-center gap-[--space-2] py-1.5 px-3 pl-2.5 rounded-[--radius-pill] bg-[--color-surface] border border-[--color-border] text-[--text-xs] font-medium text-[--color-text-secondary]"
-      style={{ boxShadow: 'var(--shadow-xs)' }}
+      className="inline-flex items-center gap-2 py-1.5 px-3 pl-2.5 rounded-full text-xs font-medium"
+      style={{ 
+        background: '#FFFFFF', 
+        border: '1px solid #E2E8F0',
+        color: '#475569',
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+      }}
     >
       <span
-        className="w-2 h-2 rounded-full bg-[#10B981]"
-        style={{ boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.18)' }}
+        className="w-2 h-2 rounded-full"
+        style={{ 
+          background: '#10B981',
+          boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.18)',
+        }}
         aria-hidden="true"
       />
       {formatLastUpdated(timestamp)}

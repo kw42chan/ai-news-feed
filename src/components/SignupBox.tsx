@@ -51,12 +51,16 @@ export function SignupBox() {
       <aside
         id="digest"
         aria-labelledby="digest-title"
-        className="bg-[--color-surface] border border-[--color-border] rounded-[--radius-lg] p-[--space-8] max-sm:p-[--space-6]"
-        style={{ boxShadow: 'var(--shadow-md)' }}
+        className="rounded-2xl p-8 max-sm:p-6"
+        style={{ 
+          background: '#FFFFFF', 
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 2px 4px rgba(15, 23, 42, 0.04), 0 12px 24px -6px rgba(15, 23, 42, 0.10)',
+        }}
       >
-        <div className="flex items-center gap-[--space-3] text-[--color-accent]">
+        <div className="flex items-center gap-3" style={{ color: '#4F46E5' }}>
           <CheckCircle className="w-6 h-6 shrink-0" />
-          <p className="text-[--color-text] font-medium">
+          <p className="font-medium" style={{ color: '#0F172A' }}>
             You're on the list. We'll email you when the first digest goes out.
           </p>
         </div>
@@ -68,16 +72,27 @@ export function SignupBox() {
     <aside
       id="digest"
       aria-labelledby="digest-title"
-      className="bg-[--color-surface] border border-[--color-border] rounded-[--radius-lg] p-[--space-8] max-sm:p-[--space-6]"
-      style={{ boxShadow: 'var(--shadow-md)' }}
+      className="rounded-2xl p-8 max-sm:p-6"
+      style={{ 
+        background: '#FFFFFF', 
+        border: '1px solid #E2E8F0',
+        boxShadow: '0 2px 4px rgba(15, 23, 42, 0.04), 0 12px 24px -6px rgba(15, 23, 42, 0.10)',
+      }}
     >
-      <div className="w-11 h-11 rounded-[--radius-md] bg-[--color-accent-soft] text-[--color-accent] grid place-items-center mb-[--space-5]">
+      <div 
+        className="w-11 h-11 rounded-xl grid place-items-center mb-5"
+        style={{ background: '#EEF2FF', color: '#4F46E5' }}
+      >
         <Mail className="w-[22px] h-[22px]" />
       </div>
-      <h2 id="digest-title" className="m-0 mb-[--space-2] text-[--text-xl] leading-[1.4] font-semibold tracking-tight">
+      <h2 
+        id="digest-title" 
+        className="m-0 mb-2 text-xl font-semibold"
+        style={{ lineHeight: 1.4, letterSpacing: '-0.015em', color: '#0F172A' }}
+      >
         Get the morning AI digest
       </h2>
-      <p className="m-0 mb-[--space-6] text-[--text-sm] leading-[1.6] text-[--color-text-secondary]">
+      <p className="m-0 mb-6 text-sm" style={{ lineHeight: 1.6, color: '#475569' }}>
         The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.
       </p>
 
@@ -94,7 +109,7 @@ export function SignupBox() {
         />
 
         <label className="sr-only" htmlFor="email">Work email</label>
-        <div className="flex gap-[--space-3] max-sm:flex-col">
+        <div className="flex gap-3 max-sm:flex-col">
           <input
             id="email"
             type="email"
@@ -104,13 +119,24 @@ export function SignupBox() {
             autoComplete="email"
             disabled={isSubmitting}
             required
-            className="flex-1 min-w-0 h-11 px-[--space-4] bg-[--color-surface] text-[--color-text] border border-[--color-border-input] rounded-[--radius-md] text-[--text-base] transition-all duration-[--dur] placeholder:text-[--color-text-muted] hover:border-[--color-border-input-hover] focus:outline-none focus:border-[--color-accent] focus:shadow-[--ring] max-sm:flex-none max-sm:w-full"
+            className="input-field flex-1 min-w-0 h-11 px-4 rounded-xl text-base max-sm:flex-none max-sm:w-full"
+            style={{ 
+              background: '#FFFFFF', 
+              color: '#0F172A',
+              border: '1px solid #8494A9',
+            }}
           />
           <button
             type="submit"
             disabled={isSubmitting || !email}
-            className="inline-flex items-center justify-center gap-[--space-2] h-11 px-[--space-5] rounded-[--radius-md] border border-transparent bg-[--color-accent] text-[--color-on-accent] text-[--text-sm] font-semibold tracking-tight whitespace-nowrap cursor-pointer transition-all duration-[--dur] hover:bg-[--color-accent-hover] hover:-translate-y-px hover:shadow-[--shadow-accent] active:bg-[--color-accent-press] active:translate-y-0 active:shadow-[--shadow-xs] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none max-sm:w-full"
-            style={{ boxShadow: 'var(--shadow-xs)' }}
+            className="btn-primary inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-sm font-semibold whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed max-sm:w-full"
+            style={{ 
+              background: '#4F46E5', 
+              color: '#FFFFFF',
+              border: '1px solid transparent',
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+              letterSpacing: '-0.005em',
+            }}
           >
             {isSubmitting ? (
               <>
@@ -124,10 +150,10 @@ export function SignupBox() {
         </div>
 
         {error && (
-          <p className="mt-[--space-3] text-[--text-sm] text-red-500">{error}</p>
+          <p className="mt-3 text-sm text-red-500">{error}</p>
         )}
 
-        <div className="flex items-center gap-[--space-2] mt-[--space-4] text-[--text-xs] text-[--color-text-muted]">
+        <div className="flex items-center gap-2 mt-4 text-xs" style={{ color: '#64748B' }}>
           <Shield className="w-3.5 h-3.5" />
           No spam. Unsubscribe anytime.
         </div>

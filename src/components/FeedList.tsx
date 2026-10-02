@@ -21,7 +21,7 @@ export function FeedList({
 }: FeedListProps) {
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-[--color-text-muted]">
+      <div className="flex flex-col items-center justify-center py-20" style={{ color: '#64748B' }}>
         <Loader2 className="w-8 h-8 animate-spin mb-4" />
         <p>Loading your feed...</p>
       </div>
@@ -31,13 +31,16 @@ export function FeedList({
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4">
+        <div 
+          className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+          style={{ background: 'rgba(239, 68, 68, 0.1)' }}
+        >
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
-        <h3 className="text-[--text-lg] font-medium text-[--color-text] mb-2">
+        <h3 className="text-lg font-medium mb-2" style={{ color: '#0F172A' }}>
           Something went wrong
         </h3>
-        <p className="text-[--color-text-muted] max-w-md">
+        <p className="max-w-md" style={{ color: '#64748B' }}>
           {error}
         </p>
       </div>
@@ -47,13 +50,16 @@ export function FeedList({
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-16 h-16 rounded-full bg-[--color-surface] border border-[--color-border] flex items-center justify-center mb-4">
-          <Inbox className="w-8 h-8 text-[--color-text-muted]" />
+        <div 
+          className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+          style={{ background: '#FFFFFF', border: '1px solid #E2E8F0' }}
+        >
+          <Inbox className="w-8 h-8" style={{ color: '#64748B' }} />
         </div>
-        <h3 className="text-[--text-lg] font-medium text-[--color-text] mb-2">
+        <h3 className="text-lg font-medium mb-2" style={{ color: '#0F172A' }}>
           No items yet
         </h3>
-        <p className="text-[--color-text-muted] max-w-md">
+        <p className="max-w-md" style={{ color: '#64748B' }}>
           The feed is empty. New content will appear here once the ingestion runs.
         </p>
       </div>
@@ -62,19 +68,25 @@ export function FeedList({
 
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[--space-6] max-sm:gap-[--space-5]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-sm:gap-5">
         {items.map((item) => (
           <FeedCard key={item.id} item={item} />
         ))}
       </div>
 
       {hasMore && (
-        <div className="flex justify-center mt-[--space-12]">
+        <div className="flex justify-center mt-12">
           <button
             onClick={onLoadMore}
             disabled={isLoadingMore}
-            className="inline-flex items-center justify-center gap-[--space-2] h-11 px-[--space-5] rounded-[--radius-md] border border-[--color-border] bg-[--color-surface] text-[--color-text] text-[--text-sm] font-semibold tracking-tight whitespace-nowrap cursor-pointer transition-all duration-[--dur] hover:border-[--color-accent-border] hover:text-[--color-accent] hover:shadow-[--shadow-sm] hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
-            style={{ boxShadow: 'var(--shadow-xs)' }}
+            className="btn-secondary inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-sm font-semibold whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ 
+              background: '#FFFFFF',
+              color: '#0F172A',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+              letterSpacing: '-0.005em',
+            }}
           >
             {isLoadingMore ? (
               <>
