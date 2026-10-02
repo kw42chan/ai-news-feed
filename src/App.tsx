@@ -4,7 +4,7 @@ import { FilterBar } from './components/FilterBar'
 import { FeedList } from './components/FeedList'
 import { LastUpdated } from './components/LastUpdated'
 import { fetchFeed, getLastUpdated } from './lib/feed'
-import type { FeedItem, FilterOption, SortOption, SourceKind } from './types'
+import type { FeedItem, SortOption } from './types'
 
 const AVAILABLE_TAGS = [
   'tools',
@@ -25,20 +25,8 @@ function App() {
   const [cursor, setCursor] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
-  const [filter, setFilter] = useState<FilterOption>('all')
   const [sort, setSort] = useState<SortOption>('latest')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-
-  const getSourceFromFilter = useCallback((): SourceKind[] | undefined => {
-    switch (filter) {
-      case 'videos':
-        return ['youtube']
-      case 'discussions':
-        return ['reddit']
-      default:
-        return undefined
-    }
-  }, [filter])
 
   const loadFeed = useCallback(async (reset = true) => {
     if (reset) {
@@ -51,9 +39,7 @@ function App() {
     }
 
     try {
-      const source = getSourceFromFilter()
       const response = await fetchFeed({
-        source,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
         sort,
         cursor: reset ? undefined : cursor ?? undefined,
@@ -77,15 +63,11 @@ function App() {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }, [filter, sort, selectedTags, cursor, getSourceFromFilter])
+  }, [sort, selectedTags, cursor])
 
   useEffect(() => {
     loadFeed(true)
-  }, [filter, sort, selectedTags])
-
-  const handleFilterChange = (newFilter: FilterOption) => {
-    setFilter(newFilter)
-  }
+  }, [sort, selectedTags])
 
   const handleSortChange = (newSort: SortOption) => {
     setSort(newSort)
@@ -113,18 +95,16 @@ function App() {
             Your AI News Feed
           </h2>
           <p className="text-[--color-text-secondary] mb-4">
-            All the AI news you care about from YouTube and Reddit, explained simply.
+            AI news from top YouTube creators, explained simply.
           </p>
           <LastUpdated timestamp={lastUpdated} />
         </div>
 
         <div className="mb-6">
           <FilterBar
-            filter={filter}
             sort={sort}
             selectedTags={selectedTags}
             availableTags={AVAILABLE_TAGS}
-            onFilterChange={handleFilterChange}
             onSortChange={handleSortChange}
             onTagToggle={handleTagToggle}
           />
