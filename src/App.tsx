@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Header } from './components/Header'
+import { SignupBox } from './components/SignupBox'
 import { FilterBar } from './components/FilterBar'
 import { FeedList } from './components/FeedList'
 import { LastUpdated } from './components/LastUpdated'
@@ -91,13 +92,17 @@ function App() {
       
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-[--color-text-primary] mb-2">
-            Your AI News Feed
+          <h2 className="text-2xl sm:text-3xl font-bold text-[--color-text-primary] mb-2">
+            AI news for busy professionals, in plain English
           </h2>
           <p className="text-[--color-text-secondary] mb-4">
-            AI news from top YouTube creators, explained simply.
+            The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
           </p>
           <LastUpdated timestamp={lastUpdated} />
+        </div>
+
+        <div className="mb-8">
+          <SignupBox />
         </div>
 
         <div className="mb-6">
