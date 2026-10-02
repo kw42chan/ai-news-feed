@@ -4,6 +4,7 @@ import { SignupBox } from './components/SignupBox'
 import { FilterBar } from './components/FilterBar'
 import { FeedList } from './components/FeedList'
 import { LastUpdated } from './components/LastUpdated'
+import { Footer } from './components/Footer'
 import { fetchFeed, getLastUpdated } from './lib/feed'
 import type { FeedItem, SortOption } from './types'
 
@@ -87,51 +88,61 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[--color-bg-primary]">
+    <div className="min-h-screen bg-[--color-bg]">
       <Header />
       
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-[--color-text-primary] mb-2">
-            AI news for busy professionals, in plain English
-          </h2>
-          <p className="text-[--color-text-secondary] mb-4">
-            The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
-          </p>
-          <LastUpdated timestamp={lastUpdated} />
-        </div>
+      <main id="top">
+        {/* Hero section */}
+        <section
+          className="relative py-[--space-20] pb-[--space-16] max-sm:py-[--space-12] max-sm:pb-[--space-10]"
+          style={{
+            background: `
+              radial-gradient(900px 380px at 12% -10%, rgba(79, 70, 229, 0.07), transparent 70%),
+              radial-gradient(700px 320px at 95% 0%, rgba(14, 165, 233, 0.05), transparent 70%)
+            `,
+          }}
+        >
+          <div className="max-w-[--container] mx-auto px-[--space-6] max-sm:px-[--space-5]">
+            <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-[--space-16] items-center max-lg:grid-cols-1 max-lg:gap-[--space-10]">
+              <div>
+                <LastUpdated timestamp={lastUpdated} />
+                <h1 className="mt-[--space-6] mb-[--space-5] max-sm:mt-[--space-5] max-sm:mb-[--space-4] text-[clamp(2.25rem,1.6rem+2.6vw,3.5rem)] leading-[1.06] tracking-[-0.035em] font-bold" style={{ textWrap: 'balance' }}>
+                  AI news for busy professionals, <span className="text-[--color-accent]">in plain English</span>
+                </h1>
+                <p className="m-0 text-[--text-lg] max-sm:text-[--text-base] leading-[1.6] text-[--color-text-secondary] max-w-[34rem] max-lg:max-w-[40rem]" style={{ textWrap: 'pretty' }}>
+                  The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
+                </p>
+              </div>
 
-        <div className="mb-8">
-          <SignupBox />
-        </div>
+              <SignupBox />
+            </div>
+          </div>
+        </section>
 
-        <div className="mb-6">
-          <FilterBar
-            sort={sort}
-            selectedTags={selectedTags}
-            availableTags={AVAILABLE_TAGS}
-            onSortChange={handleSortChange}
-            onTagToggle={handleTagToggle}
-          />
-        </div>
+        {/* Feed section */}
+        <section id="feed" aria-labelledby="feed-title" className="py-[--space-12] pb-[--space-24] max-sm:py-[--space-8] max-sm:pb-[--space-16]">
+          <div className="max-w-[--container] mx-auto px-[--space-6] max-sm:px-[--space-5]">
+            <FilterBar
+              sort={sort}
+              selectedTags={selectedTags}
+              availableTags={AVAILABLE_TAGS}
+              onSortChange={handleSortChange}
+              onTagToggle={handleTagToggle}
+            />
 
-        <FeedList
-          items={items}
-          isLoading={isLoading}
-          isLoadingMore={isLoadingMore}
-          error={error}
-          hasMore={hasMore}
-          onLoadMore={handleLoadMore}
-        />
+            <FeedList
+              items={items}
+              isLoading={isLoading}
+              isLoadingMore={isLoadingMore}
+              error={error}
+              hasMore={hasMore}
+              onLoadMore={handleLoadMore}
+            />
+          </div>
+        </section>
       </main>
 
-      <footer className="border-t border-[--color-border] mt-16">
-        <div className="max-w-5xl mx-auto px-4 py-8 text-center text-sm text-[--color-text-muted]">
-          <p>
-            AI News, Minus the Noise. Built for non-technical professionals who want to keep up with AI.
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

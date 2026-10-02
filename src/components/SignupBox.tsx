@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, Loader2, CheckCircle } from 'lucide-react'
+import { Mail, Loader2, CheckCircle, Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
@@ -17,7 +17,6 @@ export function SignupBox() {
     e.preventDefault()
     setError(null)
 
-    // Honeypot check - if filled, pretend success
     if (honeypot) {
       setIsSuccess(true)
       return
@@ -35,7 +34,6 @@ export function SignupBox() {
         .from('subscribers')
         .insert({ email: email.toLowerCase().trim() })
 
-      // Treat unique violation (23505) as success - don't reveal if email exists
       if (insertError && insertError.code !== '23505') {
         throw insertError
       }
@@ -50,80 +48,90 @@ export function SignupBox() {
 
   if (isSuccess) {
     return (
-      <div className="bg-[--color-bg-card] border border-[--color-border] rounded-2xl p-6 sm:p-8">
-        <div className="flex items-center gap-3 text-[--color-accent]">
+      <aside
+        id="digest"
+        aria-labelledby="digest-title"
+        className="bg-[--color-surface] border border-[--color-border] rounded-[--radius-lg] p-[--space-8] max-sm:p-[--space-6]"
+        style={{ boxShadow: 'var(--shadow-md)' }}
+      >
+        <div className="flex items-center gap-[--space-3] text-[--color-accent]">
           <CheckCircle className="w-6 h-6 shrink-0" />
-          <p className="text-[--color-text-primary] font-medium">
+          <p className="text-[--color-text] font-medium">
             You're on the list. We'll email you when the first digest goes out.
           </p>
         </div>
-      </div>
+      </aside>
     )
   }
 
   return (
-    <div className="bg-[--color-bg-card] border border-[--color-border] rounded-2xl p-6 sm:p-8">
-      <div className="flex items-start gap-4">
-        <div className="hidden sm:flex w-12 h-12 rounded-xl bg-[--color-accent]/10 items-center justify-center shrink-0">
-          <Mail className="w-6 h-6 text-[--color-accent]" />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-[--color-text-primary] mb-1">
-            Get the morning AI digest
-          </h3>
-          <p className="text-sm text-[--color-text-secondary] mb-4">
-            The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {/* Honeypot field - hidden from users, catches bots */}
-            <input
-              type="text"
-              name="website"
-              value={honeypot}
-              onChange={(e) => setHoneypot(e.target.value)}
-              tabIndex={-1}
-              autoComplete="off"
-              aria-hidden="true"
-              style={{ position: 'absolute', left: '-9999px', opacity: 0 }}
-            />
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Your work email"
-                className="flex-1 px-4 py-3 bg-[--color-bg-secondary] border border-[--color-border] rounded-xl text-[--color-text-primary] placeholder:text-[--color-text-muted] focus:outline-none focus:border-[--color-accent] focus:ring-1 focus:ring-[--color-accent] transition-colors"
-                disabled={isSubmitting}
-                required
-              />
-              <button
-                type="submit"
-                disabled={isSubmitting || !email}
-                className="px-6 py-3 bg-[--color-accent] hover:bg-[--color-accent-hover] text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Joining...
-                  </>
-                ) : (
-                  'Join the list'
-                )}
-              </button>
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-400">{error}</p>
-            )}
-
-            <p className="text-xs text-[--color-text-muted]">
-              No spam. Unsubscribe anytime.
-            </p>
-          </form>
-        </div>
+    <aside
+      id="digest"
+      aria-labelledby="digest-title"
+      className="bg-[--color-surface] border border-[--color-border] rounded-[--radius-lg] p-[--space-8] max-sm:p-[--space-6]"
+      style={{ boxShadow: 'var(--shadow-md)' }}
+    >
+      <div className="w-11 h-11 rounded-[--radius-md] bg-[--color-accent-soft] text-[--color-accent] grid place-items-center mb-[--space-5]">
+        <Mail className="w-[22px] h-[22px]" />
       </div>
-    </div>
+      <h2 id="digest-title" className="m-0 mb-[--space-2] text-[--text-xl] leading-[1.4] font-semibold tracking-tight">
+        Get the morning AI digest
+      </h2>
+      <p className="m-0 mb-[--space-6] text-[--text-sm] leading-[1.6] text-[--color-text-secondary]">
+        The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.
+      </p>
+
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          name="website"
+          value={honeypot}
+          onChange={(e) => setHoneypot(e.target.value)}
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          style={{ position: 'absolute', left: '-9999px', opacity: 0 }}
+        />
+
+        <label className="sr-only" htmlFor="email">Work email</label>
+        <div className="flex gap-[--space-3] max-sm:flex-col">
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Your work email"
+            autoComplete="email"
+            disabled={isSubmitting}
+            required
+            className="flex-1 min-w-0 h-11 px-[--space-4] bg-[--color-surface] text-[--color-text] border border-[--color-border-input] rounded-[--radius-md] text-[--text-base] transition-all duration-[--dur] placeholder:text-[--color-text-muted] hover:border-[--color-border-input-hover] focus:outline-none focus:border-[--color-accent] focus:shadow-[--ring] max-sm:flex-none max-sm:w-full"
+          />
+          <button
+            type="submit"
+            disabled={isSubmitting || !email}
+            className="inline-flex items-center justify-center gap-[--space-2] h-11 px-[--space-5] rounded-[--radius-md] border border-transparent bg-[--color-accent] text-[--color-on-accent] text-[--text-sm] font-semibold tracking-tight whitespace-nowrap cursor-pointer transition-all duration-[--dur] hover:bg-[--color-accent-hover] hover:-translate-y-px hover:shadow-[--shadow-accent] active:bg-[--color-accent-press] active:translate-y-0 active:shadow-[--shadow-xs] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none max-sm:w-full"
+            style={{ boxShadow: 'var(--shadow-xs)' }}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Joining...
+              </>
+            ) : (
+              'Join the list'
+            )}
+          </button>
+        </div>
+
+        {error && (
+          <p className="mt-[--space-3] text-[--text-sm] text-red-500">{error}</p>
+        )}
+
+        <div className="flex items-center gap-[--space-2] mt-[--space-4] text-[--text-xs] text-[--color-text-muted]">
+          <Shield className="w-3.5 h-3.5" />
+          No spam. Unsubscribe anytime.
+        </div>
+      </form>
+    </aside>
   )
 }
