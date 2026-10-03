@@ -1,17 +1,46 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { Info } from 'lucide-react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { GlossaryEntry } from '../lib/glossary'
 
 interface GlossaryTermProps {
   label: string
   entry?: GlossaryEntry
   className?: string
+  /** When true, label is interactive (chips / tags). Plain text when no entry. */
+  interactive?: boolean
 }
 
-export function GlossaryTerm({ label, entry, className }: GlossaryTermProps) {
+export function GlossaryTerm({
+  label,
+  entry,
+  className,
+  interactive = true,
+}: GlossaryTermProps) {
   const [open, setOpen] = useState(false)
   const popoverId = useId()
-  const rootRef = useRef<HTMLSpanElement>(null)
+  const triggerRef = useRef<HTMLElement>(null)
+  const [position, setPosition] = useState({ top: 0, left: 0 })
+
+  const updatePosition = () => {
+    const el = triggerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    setPosition({
+      top: rect.bottom + window.scrollY + 6,
+      left: Math.min(rect.left + window.scrollX, window.innerWidth - 280),
+    })
+  }
+
+  useLayoutEffect(() => {
+    if (!open) return
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -19,7 +48,11 @@ export function GlossaryTerm({ label, entry, className }: GlossaryTermProps) {
       if (e.key === 'Escape') setOpen(false)
     }
     const onClick = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (triggerRef.current?.contains(target)) return
+      const pop = document.getElementById(popoverId)
+      if (pop?.contains(target)) return
+      setOpen(false)
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('mousedown', onClick)
@@ -27,35 +60,51 @@ export function GlossaryTerm({ label, entry, className }: GlossaryTermProps) {
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('mousedown', onClick)
     }
-  }, [open])
+  }, [open, popoverId])
 
-  if (!entry) {
+  if (!entry || !interactive) {
     return <span className={className}>{label}</span>
   }
 
+  const show = () => {
+    updatePosition()
+    setOpen(true)
+  }
+
   return (
-    <span ref={rootRef} className={`relative inline-flex items-center gap-1 ${className ?? ''}`}>
-      <span>{label}</span>
+    <>
       <button
+        ref={triggerRef as React.RefObject<HTMLButtonElement>}
         type="button"
-        className="inline-flex items-center justify-center w-5 h-5 rounded-full text-meta hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal"
+        className={`glossary-term-trigger ${className ?? ''}`}
         aria-expanded={open}
         aria-controls={popoverId}
-        aria-label={`What is ${entry.term}?`}
-        onClick={() => setOpen((v) => !v)}
+        aria-label={`${label}: tap for a plain-English definition`}
+        onClick={() => (open ? setOpen(false) : show())}
+        onMouseEnter={() => {
+          if (window.matchMedia('(hover: hover)').matches) show()
+        }}
+        onMouseLeave={() => {
+          if (window.matchMedia('(hover: hover)').matches) setOpen(false)
+        }}
+        onFocus={show}
+        onBlur={() => setOpen(false)}
       >
-        <Info className="w-3.5 h-3.5" />
+        {label}
       </button>
-      {open && (
-        <span
-          id={popoverId}
-          role="tooltip"
-          className="absolute left-0 top-full z-50 mt-1 w-[min(16rem,calc(100vw-2rem))] rounded-md border border-border bg-paper p-3 text-[13px] leading-snug text-stone shadow-[var(--shadow-card-hover)]"
-        >
-          <strong className="block text-ink text-[13px] mb-1">{entry.term}</strong>
-          {entry.definition}
-        </span>
-      )}
-    </span>
+      {open &&
+        createPortal(
+          <div
+            id={popoverId}
+            role="tooltip"
+            className="glossary-popover"
+            style={{ top: position.top, left: position.left }}
+          >
+            <strong className="block text-ink text-[13px] mb-1">{entry.term}</strong>
+            {entry.definition}
+          </div>,
+          document.body
+        )}
+    </>
   )
 }

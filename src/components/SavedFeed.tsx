@@ -1,17 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { FeedList } from './FeedList'
 import { fetchFeed } from '../lib/feed'
-import { loadGlossary } from '../lib/glossary'
-import type { GlossaryEntry } from '../lib/glossary'
 import { getSavedStoryIds } from '../lib/bookmarks'
 import { navigateTo } from '../lib/routing'
-import type { FeedItem } from '../types'
 
 export function SavedFeed() {
-  const [items, setItems] = useState<FeedItem[]>([])
+  const [items, setItems] = useState<Awaited<ReturnType<typeof fetchFeed>>['items']>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [glossary, setGlossary] = useState<Map<string, GlossaryEntry>>(new Map())
   const [bookmarkTick, setBookmarkTick] = useState(0)
 
   const load = useCallback(async () => {
@@ -27,12 +23,6 @@ export function SavedFeed() {
       setIsLoading(false)
     }
   }, [bookmarkTick])
-
-  useEffect(() => {
-    loadGlossary()
-      .then(setGlossary)
-      .catch(() => setGlossary(new Map()))
-  }, [])
 
   useEffect(() => {
     load()
@@ -52,11 +42,7 @@ export function SavedFeed() {
           error={error}
           hasMore={false}
           onLoadMore={() => {}}
-          glossary={glossary}
-          onBookmarkChange={() => {
-            setBookmarkTick((t) => t + 1)
-          }}
-          bookmarkTick={bookmarkTick}
+          onBookmarkChange={() => setBookmarkTick((t) => t + 1)}
           emptyMessage="You have not saved any stories yet. Tap the bookmark on a story to add one."
         />
         <button type="button" className="btn-secondary mt-8" onClick={() => navigateTo('/')}>

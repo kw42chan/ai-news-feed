@@ -1,6 +1,5 @@
 import { FeedCard } from './FeedCard'
 import type { FeedItem } from '../types'
-import type { GlossaryEntry } from '../lib/glossary'
 import { Loader2, AlertCircle, Inbox } from 'lucide-react'
 
 interface FeedListProps {
@@ -10,9 +9,7 @@ interface FeedListProps {
   error: string | null
   hasMore: boolean
   onLoadMore: () => void
-  glossary?: Map<string, GlossaryEntry>
   onBookmarkChange?: () => void
-  bookmarkTick?: number
   emptyMessage?: string
 }
 
@@ -23,7 +20,6 @@ export function FeedList({
   error,
   hasMore,
   onLoadMore,
-  glossary = new Map(),
   onBookmarkChange,
   emptyMessage,
 }: FeedListProps) {
@@ -66,12 +62,7 @@ export function FeedList({
     <div>
       <div className="flex flex-col gap-4">
         {items.map((item) => (
-          <FeedCard
-            key={item.id}
-            item={item}
-            glossary={glossary}
-            onBookmarkChange={onBookmarkChange}
-          />
+          <FeedCard key={item.id} item={item} onBookmarkChange={onBookmarkChange} />
         ))}
       </div>
 

@@ -19,9 +19,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (route.name === 'story' && route.id) {
-      document.title = 'AI News story'
-    } else if (route.name === 'weekly') {
+    if (route.name === 'story') return
+    if (route.name === 'weekly') {
       document.title = 'This week in AI — AI News, Minus the Noise'
     } else if (route.name === 'saved') {
       document.title = 'Saved stories — AI News, Minus the Noise'
@@ -31,20 +30,22 @@ function App() {
   }, [route])
 
   return (
-    <div className="min-h-screen bg-mist">
+    <div className="min-h-screen bg-mist flex flex-col">
       <Header hasWeeklyRecap={hasWeeklyRecap} />
-      {route.name === 'home' && <HomeFeed />}
-      {route.name === 'weekly' && (
-        <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
-          <WeeklyPage />
-        </div>
-      )}
-      {route.name === 'saved' && <SavedFeed />}
-      {route.name === 'story' && (
-        <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
-          <StoryPage id={route.id} />
-        </div>
-      )}
+      <div className="flex-1 w-full">
+        {route.name === 'home' && <HomeFeed />}
+        {route.name === 'weekly' && (
+          <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
+            <WeeklyPage />
+          </div>
+        )}
+        {route.name === 'saved' && <SavedFeed />}
+        {route.name === 'story' && (
+          <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
+            <StoryPage id={route.id} />
+          </div>
+        )}
+      </div>
       <Footer />
     </div>
   )

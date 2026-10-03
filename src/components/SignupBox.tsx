@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Mail, Loader2, CheckCircle } from 'lucide-react'
+import { ChipSelect } from './ChipSelect'
 import { supabase } from '../lib/supabase'
 import {
   getSignupRolePreference,
@@ -7,10 +8,11 @@ import {
   setSignupRolePreference,
   type ProfessionalRole,
 } from '../lib/roles'
+import { isSchemaMismatchError } from '../lib/postgrest'
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
-export function SignupBox() {
+export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boolean }) {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ProfessionalRole | ''>(() => getSignupRolePreference() ?? '')
   const [honeypot, setHoneypot] = useState('')
@@ -42,7 +44,19 @@ export function SignupBox() {
       }
       if (role) payload.role = role
 
-      const { error: insertError } = await supabase.from('subscribers').insert(payload)
+      let { error: insertError } = await supabase.from('subscribers').insert(payload)
+
+      if (
+        insertError &&
+        insertError.code !== '23505' &&
+        role &&
+        isSchemaMismatchError(insertError.message)
+      ) {
+        const retry = await supabase.from('subscribers').insert({
+          email: payload.email,
+        })
+        insertError = retry.error
+      }
 
       if (insertError && insertError.code !== '23505') {
         throw insertError
@@ -61,7 +75,7 @@ export function SignupBox() {
     return (
       <aside
         id="digest"
-        className="bg-paper border border-border rounded-[12px] p-6 shadow-[var(--shadow-signup)]"
+        className={`bg-paper border border-border rounded-[12px] shadow-[var(--shadow-signup)] ${compactOnMobile ? 'p-4 max-sm:p-4 sm:p-6' : 'p-6'}`}
       >
         <div className="flex items-start gap-3 text-signal">
           <CheckCircle className="w-5 h-5 mt-0.5 shrink-0" />
@@ -77,7 +91,7 @@ export function SignupBox() {
     <aside
       id="digest"
       aria-labelledby="digest-title"
-      className="bg-paper border border-border rounded-[12px] p-6 shadow-[var(--shadow-signup)]"
+      className={`bg-paper border border-border rounded-[12px] shadow-[var(--shadow-signup)] ${compactOnMobile ? 'p-4 max-sm:p-4 sm:p-6' : 'p-6'}`}
     >
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-lg bg-signal-soft text-signal grid place-items-center">
@@ -88,7 +102,7 @@ export function SignupBox() {
         </h2>
       </div>
 
-      <p className="text-[14px] leading-relaxed text-stone mb-5">
+      <p className={`text-[14px] leading-relaxed text-stone ${compactOnMobile ? 'mb-3 max-sm:mb-3 sm:mb-5' : 'mb-5'}`}>
         The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.
       </p>
 
@@ -133,19 +147,18 @@ export function SignupBox() {
               )}
             </button>
           </div>
-          <label className="sr-only" htmlFor="signup-role">Your role (optional)</label>
-          <select
+          <ChipSelect
             id="signup-role"
             value={role}
-            onChange={(e) => setRole(e.target.value as ProfessionalRole | '')}
+            prefix="Role"
+            aria-label="Your role (optional)"
+            options={[
+              { value: '', label: 'Optional' },
+              ...PROFESSIONAL_ROLES.map((r) => ({ value: r, label: r })),
+            ]}
+            onChange={(value) => setRole(value as ProfessionalRole | '')}
             disabled={isSubmitting}
-            className="input-field text-[14px] text-stone"
-          >
-            <option value="">Your role (optional)</option>
-            {PROFESSIONAL_ROLES.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
+          />
         </div>
 
         {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}

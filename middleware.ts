@@ -1,4 +1,4 @@
-import { next } from '@vercel/edge'
+import { next, rewrite } from '@vercel/edge'
 
 const BOT_PATTERN =
   /bot|facebookexternalhit|twitterbot|slackbot|linkedinbot|whatsapp|discordbot|telegrambot|googlebot/i
@@ -19,5 +19,5 @@ export default function middleware(request: Request) {
 
   const rewriteUrl = new URL('/api/og-story', request.url)
   rewriteUrl.searchParams.set('id', id)
-  return Response.rewrite(rewriteUrl)
+  return rewrite(rewriteUrl)
 }

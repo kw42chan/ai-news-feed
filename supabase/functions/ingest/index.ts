@@ -12,6 +12,8 @@ const VALID_TAGS = [
 
 const MAX_SUMMARIES_PER_RUN = 40;
 const SUMMARY_CONCURRENCY = 5;
+const GLOSSARY_MAX_PER_RUN = 5;
+const GLOSSARY_TIMEOUT_MS = 8000;
 
 // Default model: qwen works globally; Google/OpenAI models may return 403 in some regions (e.g. Hong Kong)
 // Override via OPENROUTER_MODEL Vault secret
@@ -376,15 +378,24 @@ Respond in JSON only: {"definition": "..."}`;
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function ensureGlossaryTerms(
   supabase: ReturnType<typeof createClient>,
   keywords: string[],
   apiKey: string,
-  model: string
+  model: string,
+  glossaryBudget: { remaining: number }
 ): Promise<void> {
-  for (const keyword of keywords) {
-    const term = keyword.trim();
-    if (!term) continue;
+  const unique = [...new Set(keywords.map((k) => k.trim()).filter(Boolean))];
+
+  const tasks = unique.map(async (term) => {
+    if (glossaryBudget.remaining <= 0) return;
 
     const { data: existing } = await supabase
       .from("glossary")
@@ -392,16 +403,22 @@ async function ensureGlossaryTerms(
       .ilike("term", term)
       .maybeSingle();
 
-    if (existing) continue;
+    if (existing) return;
 
-    const definition = await generateGlossaryDefinition(term, apiKey, model);
-    if (!definition) continue;
+    const definition = await withTimeout(
+      generateGlossaryDefinition(term, apiKey, model),
+      GLOSSARY_TIMEOUT_MS
+    );
+    if (!definition) return;
 
+    glossaryBudget.remaining -= 1;
     await supabase.from("glossary").upsert(
       { term, definition, aliases: [] },
       { onConflict: "term", ignoreDuplicates: true }
     );
-  }
+  });
+
+  await Promise.all(tasks);
 }
 
 async function generateSummary(
@@ -560,6 +577,8 @@ Deno.serve(async (req) => {
     const openRouterModel =
       (await getAppSecret(supabase, "OPENROUTER_MODEL")) || DEFAULT_OPENROUTER_MODEL;
 
+    const glossaryBudget = { remaining: GLOSSARY_MAX_PER_RUN };
+
     if (requestBody.mode === "backfill_keywords") {
       if (!openRouterKey) {
         return new Response(
@@ -568,31 +587,23 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { data: candidates, error: candidatesError } = await supabase
+      const { data: needsEnrichment, error: candidatesError } = await supabase
         .from("feed_items")
         .select("id, title, source_name, keywords, roles, try_this")
         .eq("hidden", false)
         .not("summary", "is", null)
+        .is("enriched_at", null)
         .order("published_at", { ascending: false })
-        .limit(200);
+        .limit(MAX_SUMMARIES_PER_RUN);
 
       if (candidatesError) throw candidatesError;
 
-      const needsEnrichment = (candidates || [])
-        .filter(
-          (item) =>
-            !item.keywords?.length ||
-            !item.roles?.length ||
-            item.try_this === null ||
-            item.try_this === undefined
-        )
-        .slice(0, MAX_SUMMARIES_PER_RUN);
-
       let itemsEnriched = 0;
+      const batch = needsEnrichment || [];
 
-      if (needsEnrichment.length > 0) {
+      if (batch.length > 0) {
         await processSummariesInBatches(
-          needsEnrichment,
+          batch,
           async (item) => {
             const result = await generateSummary(
               item.title,
@@ -601,25 +612,34 @@ Deno.serve(async (req) => {
               openRouterModel
             );
 
-            if (!result) return;
+            const enrichedAt = new Date().toISOString();
+            const patch: Record<string, unknown> = { enriched_at: enrichedAt };
 
-            const patch: Record<string, unknown> = {};
-            if (!item.keywords?.length && result.keywords.length > 0) {
-              patch.keywords = result.keywords;
+            if (result) {
+              if (!item.keywords?.length && result.keywords.length > 0) {
+                patch.keywords = result.keywords;
+              }
+              if (!item.roles?.length && result.roles.length > 0) {
+                patch.roles = result.roles;
+              }
+              if (
+                (item.try_this === null || item.try_this === undefined) &&
+                result.try_this
+              ) {
+                patch.try_this = result.try_this;
+              }
             }
-            if (!item.roles?.length && result.roles.length > 0) {
-              patch.roles = result.roles;
-            }
-            if ((item.try_this === null || item.try_this === undefined) && result.try_this) {
-              patch.try_this = result.try_this;
-            }
-
-            if (Object.keys(patch).length === 0) return;
 
             await supabase.from("feed_items").update(patch).eq("id", item.id);
 
-            if (result.keywords.length > 0) {
-              await ensureGlossaryTerms(supabase, result.keywords, openRouterKey, openRouterModel);
+            if (result?.keywords?.length) {
+              await ensureGlossaryTerms(
+                supabase,
+                result.keywords,
+                openRouterKey,
+                openRouterModel,
+                glossaryBudget
+              );
             }
             itemsEnriched++;
           },
@@ -763,6 +783,7 @@ Deno.serve(async (req) => {
                   try_this: result.try_this,
                   summary_model: openRouterModel,
                   summarized_at: new Date().toISOString(),
+                  enriched_at: new Date().toISOString(),
                 })
                 .eq("id", item.id);
               if (result.keywords.length > 0) {
@@ -770,7 +791,8 @@ Deno.serve(async (req) => {
                   supabase,
                   result.keywords,
                   openRouterKey,
-                  openRouterModel
+                  openRouterModel,
+                  glossaryBudget
                 );
               }
               itemsSummarized++;

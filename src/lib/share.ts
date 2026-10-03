@@ -3,7 +3,13 @@ export function getStoryShareUrl(id: string): string {
   return `${origin}/story/${id}`
 }
 
-export async function shareStory(id: string, title: string, summary: string | null): Promise<'shared' | 'copied' | 'failed'> {
+export type ShareResult = 'shared' | 'copied' | 'failed'
+
+export async function shareStory(
+  id: string,
+  title: string,
+  summary: string | null
+): Promise<ShareResult> {
   const url = getStoryShareUrl(id)
   const text = summary ?? title
 

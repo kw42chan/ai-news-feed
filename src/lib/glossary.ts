@@ -21,22 +21,54 @@ export async function loadGlossary(): Promise<Map<string, GlossaryEntry>> {
       definition: row.definition,
       aliases: row.aliases ?? [],
     }
-    map.set(normalizeTermKey(row.term), entry)
-    for (const alias of entry.aliases) {
-      map.set(normalizeTermKey(alias), entry)
-    }
+    registerGlossaryKeys(map, entry)
   }
   cache = map
   return map
+}
+
+function registerGlossaryKeys(map: Map<string, GlossaryEntry>, entry: GlossaryEntry): void {
+  for (const key of expandLookupKeys(entry.term)) {
+    map.set(key, entry)
+  }
+  for (const alias of entry.aliases) {
+    for (const key of expandLookupKeys(alias)) {
+      map.set(key, entry)
+    }
+  }
 }
 
 export function normalizeTermKey(term: string): string {
   return term.trim().toLowerCase()
 }
 
+function singularize(term: string): string {
+  if (term.endsWith('ies') && term.length > 4) {
+    return `${term.slice(0, -3)}y`
+  }
+  if (term.endsWith('s') && !term.endsWith('ss') && term.length > 3) {
+    return term.slice(0, -1)
+  }
+  return term
+}
+
+function expandLookupKeys(label: string): string[] {
+  const base = normalizeTermKey(label)
+  const sing = singularize(base)
+  return base === sing ? [base] : [base, sing]
+}
+
 export function lookupGlossary(
   map: Map<string, GlossaryEntry>,
   label: string
 ): GlossaryEntry | undefined {
-  return map.get(normalizeTermKey(label))
+  for (const key of expandLookupKeys(label)) {
+    const hit = map.get(key)
+    if (hit) return hit
+  }
+  const target = singularize(normalizeTermKey(label))
+  for (const [key, entry] of map) {
+    if (singularize(key) === target) return entry
+  }
+  return undefined
 }

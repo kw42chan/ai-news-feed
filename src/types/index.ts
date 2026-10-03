@@ -46,7 +46,6 @@ export interface FetchFeedOptions {
   tags?: string[]
   keyword?: string
   role?: string
-  rolePrioritize?: string
   savedIds?: string[]
   source?: SourceKind | SourceKind[]
   sort?: SortOption

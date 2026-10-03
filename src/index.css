@@ -271,6 +271,120 @@ button, input {
   text-decoration: none;
 }
 
+.sort-text-toggle button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-meta);
+  cursor: pointer;
+  font: inherit;
+}
+
+.sort-text-toggle button:hover {
+  color: var(--color-signal);
+}
+
+.sort-text-active {
+  color: var(--color-ink) !important;
+}
+
+.chip-select-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.chip-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.chip-select-face {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-chip);
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.chip-select-wrap:hover .chip-select-face {
+  border-color: var(--color-signal);
+}
+
+.chip-has-glossary {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.glossary-term-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: help;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.chip-glossary-tag.glossary-term-trigger {
+  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-chip);
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.glossary-popover {
+  position: absolute;
+  z-index: 200;
+  width: min(16rem, calc(100vw - 2rem));
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--color-border);
+  background: var(--color-paper);
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-stone);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.try-this-callout {
+  border-left: 4px solid var(--color-signal);
+  background: var(--color-signal-soft);
+  padding: 16px 18px;
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+}
+
+.card-actions {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card .card-actions {
+    opacity: 0.45;
+    transition: opacity 0.15s ease;
+  }
+
+  .card:hover .card-actions,
+  .card:focus-within .card-actions {
+    opacity: 1;
+  }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

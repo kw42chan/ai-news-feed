@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { isSchemaMismatchError } from './postgrest'
 import type {
   FeedItem,
   FetchFeedOptions,
@@ -10,21 +11,19 @@ import type {
 
 const DEFAULT_PAGE_SIZE = 20
 
-function prioritizeByRole(items: FeedItem[], role: string): FeedItem[] {
-  return [...items].sort((a, b) => {
-    const aMatch = a.roles?.includes(role) ? 1 : 0
-    const bMatch = b.roles?.includes(role) ? 1 : 0
-    return bMatch - aMatch
-  })
+export class RoleFilterUnsupportedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RoleFilterUnsupportedError'
+  }
 }
 
-export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedResponse> {
+async function runFeedQuery(options: FetchFeedOptions): Promise<FeedResponse> {
   const {
     sourceIds,
     tags,
     keyword,
     role,
-    rolePrioritize,
     savedIds,
     source,
     sort = 'latest',
@@ -85,14 +84,13 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
   const { data, error } = await query
 
   if (error) {
+    if (role && isSchemaMismatchError(error.message)) {
+      throw new RoleFilterUnsupportedError(error.message)
+    }
     throw new Error(`Failed to fetch feed: ${error.message}`)
   }
 
-  let youtubeItems = ((data || []) as FeedItem[]).filter(item => item.source === 'youtube')
-
-  if (rolePrioritize && !role) {
-    youtubeItems = prioritizeByRole(youtubeItems, rolePrioritize)
-  }
+  let youtubeItems = ((data || []) as FeedItem[]).filter((item) => item.source === 'youtube')
 
   if (savedIds && savedIds.length > 0) {
     const order = new Map(savedIds.map((id, i) => [id, i]))
@@ -101,15 +99,20 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
 
   const hasMore = youtubeItems.length > limit
   const returnItems = hasMore ? youtubeItems.slice(0, limit) : youtubeItems
-  const nextCursor = hasMore && returnItems.length > 0
-    ? returnItems[returnItems.length - 1].published_at
-    : null
+  const nextCursor =
+    hasMore && returnItems.length > 0
+      ? returnItems[returnItems.length - 1].published_at
+      : null
 
   return {
     items: returnItems,
     nextCursor,
     hasMore,
   }
+}
+
+export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedResponse> {
+  return runFeedQuery(options)
 }
 
 export async function fetchFeedItemById(id: string): Promise<FeedItem | null> {
@@ -126,6 +129,31 @@ export async function fetchFeedItemById(id: string): Promise<FeedItem | null> {
   return data as FeedItem
 }
 
+export async function fetchFeedTitlesByIds(ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)]
+  if (unique.length === 0) return new Map()
+
+  const { data, error } = await supabase
+    .from('feed_items')
+    .select('id, title')
+    .in('id', unique)
+
+  if (error) return new Map()
+  const map = new Map<string, string>()
+  for (const row of data ?? []) {
+    if (row.title) map.set(row.id, row.title)
+  }
+  return map
+}
+
+export async function fetchRelatedStories(item: FeedItem, limit = 3): Promise<FeedItem[]> {
+  const keyword = item.keywords?.[0]
+  if (!keyword) return []
+
+  const { items } = await fetchFeed({ keyword, sort: 'latest', limit: limit + 2 })
+  return items.filter((row) => row.id !== item.id).slice(0, limit)
+}
+
 export async function fetchLatestWeeklyRecap(): Promise<WeeklyRecap | null> {
   const { data, error } = await supabase
     .from('weekly_recaps')
@@ -134,7 +162,10 @@ export async function fetchLatestWeeklyRecap(): Promise<WeeklyRecap | null> {
     .limit(1)
     .maybeSingle()
 
-  if (error) throw new Error(`Failed to fetch weekly recap: ${error.message}`)
+  if (error) {
+    if (isSchemaMismatchError(error.message)) return null
+    throw new Error(`Failed to fetch weekly recap: ${error.message}`)
+  }
   return data as WeeklyRecap | null
 }
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { SignupBox } from './SignupBox'
 import { FilterBar } from './FilterBar'
 import { FeedList } from './FeedList'
-import { fetchFeed, fetchTrendingKeywords, getLastUpdated } from '../lib/feed'
+import { fetchFeed, fetchTrendingKeywords, getLastUpdated, RoleFilterUnsupportedError } from '../lib/feed'
 import { loadGlossary } from '../lib/glossary'
 import type { GlossaryEntry } from '../lib/glossary'
 import { getFeedRoleFilter, setFeedRoleFilter, type ProfessionalRole } from '../lib/roles'
@@ -32,8 +32,6 @@ export function HomeFeed() {
   const [hasMore, setHasMore] = useState(false)
   const [cursor, setCursor] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
-  const [bookmarkTick, setBookmarkTick] = useState(0)
-
   const [sort, setSort] = useState<SortOption>('latest')
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null)
   const [trendingKeywords, setTrendingKeywords] = useState<TrendingKeyword[]>([])
@@ -53,6 +51,8 @@ export function HomeFeed() {
 
   const loadFeed = useCallback(
     async (reset: boolean) => {
+      const roleFilter = feedRoleFilter
+
       if (reset) {
         setIsLoading(true)
         setError(null)
@@ -66,7 +66,7 @@ export function HomeFeed() {
           keyword: selectedKeyword ?? undefined,
           sort,
           cursor: reset ? undefined : cursor ?? undefined,
-          role: feedRoleFilter ?? undefined,
+          role: roleFilter ?? undefined,
         })
 
         if (reset) {
@@ -83,6 +83,24 @@ export function HomeFeed() {
           setLastUpdated(updated)
         }
       } catch (err) {
+        if (err instanceof RoleFilterUnsupportedError && roleFilter) {
+          setFeedRoleFilter(null)
+          setFeedRoleFilterState(null)
+          try {
+            const response = await fetchFeed({
+              keyword: selectedKeyword ?? undefined,
+              sort,
+            })
+            setItems(response.items)
+            setCursor(response.nextCursor)
+            setHasMore(response.hasMore)
+            const updated = await getLastUpdated()
+            setLastUpdated(updated)
+          } catch (fallbackErr) {
+            setError(fallbackErr instanceof Error ? fallbackErr.message : 'Failed to load feed')
+          }
+          return
+        }
         setError(err instanceof Error ? err.message : 'Failed to load feed')
       } finally {
         setIsLoading(false)
@@ -108,46 +126,42 @@ export function HomeFeed() {
     setFeedRoleFilterState(role)
   }
 
-  const handleBookmarkChange = () => {
-    setBookmarkTick((t) => t + 1)
-  }
-
-  const emptyMessage =
-    feedRoleFilter
-      ? `No stories tagged for ${feedRoleFilter} yet. Try Show all or check back later.`
-      : undefined
+  const emptyMessage = feedRoleFilter
+    ? `No stories tagged for ${feedRoleFilter} yet. Try All roles or check back later.`
+    : undefined
 
   return (
     <main id="top">
       <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-x-10 lg:items-start">
-          <section className="py-16 max-sm:py-10 lg:col-start-1 lg:row-start-1 lg:pb-8">
-            <h1 className="font-display text-[42px] max-sm:text-[32px] font-semibold leading-[1.1] tracking-tight text-ink mb-4 max-w-[640px]">
+          <section className="py-8 max-sm:py-5 lg:py-16 lg:col-start-1 lg:row-start-1 lg:pb-6 max-sm:pb-4">
+            <h1 className="font-display text-[42px] max-sm:text-[28px] font-semibold leading-[1.1] tracking-tight text-ink mb-3 max-sm:mb-2 max-w-[640px]">
               AI news for busy professionals, in plain English
             </h1>
-            <p className="text-[17px] leading-relaxed text-stone mb-4 max-w-[540px]">
+            <p className="text-[17px] max-sm:text-[15px] leading-relaxed text-stone mb-2 max-sm:mb-1 max-w-[540px]">
               The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
             </p>
-            {lastUpdated && <p className="text-[14px] text-meta">{formatLastUpdated(lastUpdated)}</p>}
+            {lastUpdated && <p className="text-[13px] max-sm:text-[12px] text-meta">{formatLastUpdated(lastUpdated)}</p>}
           </section>
 
           <aside
-            className="mb-8 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[4.5rem] lg:self-start lg:mt-16"
+            className="mb-4 max-sm:mb-3 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[4.5rem] lg:self-start lg:mt-16"
             aria-label="Morning digest signup"
           >
-            <SignupBox />
+            <SignupBox compactOnMobile />
           </aside>
 
           <section
             id="feed"
             aria-labelledby="feed-title"
-            className="pb-20 max-sm:pb-12 lg:col-start-1 lg:row-start-2 min-w-0"
+            className="pb-20 max-sm:pb-12 lg:col-start-1 lg:row-start-2 min-w-0 max-sm:-mt-1"
           >
             <FilterBar
               sort={sort}
               selectedKeyword={selectedKeyword}
               trendingKeywords={trendingKeywords}
               feedRoleFilter={feedRoleFilter}
+              glossary={glossary}
               onSortChange={setSort}
               onKeywordSelect={setSelectedKeyword}
               onFeedRoleFilterChange={handleRoleFilterChange}
@@ -160,9 +174,7 @@ export function HomeFeed() {
               error={error}
               hasMore={hasMore}
               onLoadMore={handleLoadMore}
-              glossary={glossary}
-              onBookmarkChange={handleBookmarkChange}
-              bookmarkTick={bookmarkTick}
+              onBookmarkChange={() => {}}
               emptyMessage={emptyMessage}
             />
           </section>

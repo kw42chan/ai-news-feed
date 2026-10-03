@@ -29,6 +29,50 @@ function getWeekStartHKT(date = new Date()): string {
   return hkt.toISOString().slice(0, 10);
 }
 
+/** Monday of the week being recapped (previous Mon–Sun when the job runs Monday HKT). */
+function getRecapWeekStartHKT(date = new Date()): string {
+  const currentMonday = getWeekStartHKT(date);
+  const [y, m, d] = currentMonday.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d));
+  prev.setUTCDate(prev.getUTCDate() - 7);
+  const py = prev.getUTCFullYear();
+  const pm = String(prev.getUTCMonth() + 1).padStart(2, "0");
+  const pd = String(prev.getUTCDate()).padStart(2, "0");
+  return `${py}-${pm}-${pd}`;
+}
+
+interface RecapItem {
+  headline: string;
+  explanation: string;
+  why_it_matters: string;
+  feed_item_ids: string[];
+}
+
+function sanitizeRecapItems(raw: unknown): RecapItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  const items: RecapItem[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const headline =
+      typeof record.headline === "string" ? record.headline.trim() : "";
+    const explanation =
+      typeof record.explanation === "string" ? record.explanation.trim() : "";
+    const why_it_matters =
+      typeof record.why_it_matters === "string"
+        ? record.why_it_matters.trim()
+        : "";
+    const feed_item_ids = Array.isArray(record.feed_item_ids)
+      ? record.feed_item_ids.filter((id): id is string => typeof id === "string")
+      : [];
+
+    if (!headline || !explanation || !why_it_matters) continue;
+    items.push({ headline, explanation, why_it_matters, feed_item_ids });
+  }
+  return items;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -142,14 +186,25 @@ Respond in JSON only:
     if (!jsonMatch) throw new Error("No JSON in model response");
 
     const parsed = JSON.parse(jsonMatch[0]);
-    const weekStart = getWeekStartHKT();
+    const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
+    const intro = typeof parsed.intro === "string" ? parsed.intro.trim() : "";
+    const items = sanitizeRecapItems(parsed.items);
+
+    if (!title || !intro || items.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, skipped: "invalid_model_response" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const weekStart = getRecapWeekStartHKT();
 
     const { error: upsertError } = await supabase.from("weekly_recaps").upsert(
       {
         week_start: weekStart,
-        title: parsed.title,
-        intro: parsed.intro,
-        items: parsed.items ?? [],
+        title,
+        intro,
+        items,
       },
       { onConflict: "week_start" }
     );
