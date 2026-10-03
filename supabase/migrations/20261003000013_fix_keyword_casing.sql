@@ -34,6 +34,8 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.repair_keyword_token(text) FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.repair_keyword_phrase(phrase text)
 RETURNS text
 LANGUAGE sql
@@ -47,6 +49,8 @@ AS $$
   FROM unnest(regexp_split_to_array(btrim(phrase), '\s+')) WITH ORDINALITY AS parts(word, ord)
   WHERE btrim(word) <> '';
 $$;
+
+REVOKE ALL ON FUNCTION public.repair_keyword_phrase(text) FROM PUBLIC, anon, authenticated;
 
 UPDATE public.feed_items fi
 SET keywords = sub.repaired

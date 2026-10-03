@@ -124,15 +124,16 @@ function formatKeywordToken(word: string): string {
   const trimmed = word.trim();
   if (!trimmed) return "";
 
-  const canonical = KEYWORD_CANONICAL_LOWER[trimmed.toLowerCase()];
+  const lower = trimmed.toLowerCase();
+  const canonical = KEYWORD_CANONICAL_LOWER[lower];
   if (canonical) return canonical;
-
-  if (/[A-Z]/.test(trimmed) || /\d/.test(trimmed)) {
-    return trimmed;
-  }
 
   if (/^gpt-/i.test(trimmed)) {
     return `GPT-${trimmed.slice(4)}`;
+  }
+
+  if (/[A-Z]/.test(trimmed) || /\d/.test(trimmed)) {
+    return trimmed;
   }
 
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
