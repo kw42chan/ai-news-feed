@@ -75,6 +75,19 @@ export function StoryPage({ id }: StoryPageProps) {
         <p className="text-[18px] leading-relaxed text-stone mb-8">{item.summary}</p>
       )}
 
+      {item.key_points && item.key_points.length > 0 && (
+        <section className="mb-8" aria-labelledby="key-points-title">
+          <h2 id="key-points-title" className="font-display text-[22px] font-semibold text-ink mb-3">
+            Key points
+          </h2>
+          <ul className="list-disc pl-5 space-y-2 text-[16px] leading-relaxed text-stone">
+            {item.key_points.map((point) => (
+              <li key={point}>{point}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {item.try_this && (
         <aside className="try-this-callout mb-8" aria-label="Try this tip">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-signal mb-2">Try this</p>

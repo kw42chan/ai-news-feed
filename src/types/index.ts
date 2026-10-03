@@ -33,6 +33,7 @@ export interface FeedItem {
   keywords: string[]
   roles: string[]
   try_this: string | null
+  key_points: string[] | null
   hidden: boolean
   created_at: string
   updated_at: string

@@ -1,0 +1,55 @@
+{
+  "version": 3,
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "^/story(?:/([^/]+?))$",
+      "dest": "/api/og-story?id=$1",
+      "check": true,
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(bot|Bot|BOT|facebookexternalhit|WhatsApp|Slack|Discord|Telegram|LinkedIn|Twitter).*"
+        }
+      ]
+    },
+    {
+      "src": "^/api(?:/(.*))$",
+      "dest": "/api/$1",
+      "check": true
+    },
+    {
+      "src": "^(?:/(.*))$",
+      "dest": "/",
+      "check": true
+    },
+    {
+      "src": "^/api(/.*)?$",
+      "status": 404
+    },
+    {
+      "handle": "error"
+    },
+    {
+      "status": 404,
+      "src": "^(?!/api).*$",
+      "dest": "/404.html"
+    },
+    {
+      "handle": "miss"
+    },
+    {
+      "src": "^/api/(.+)(?:\\.(?:js))$",
+      "dest": "/api/$1",
+      "check": true
+    }
+  ],
+  "framework": {
+    "slug": "vite",
+    "version": "8.3.1"
+  },
+  "crons": []
+}

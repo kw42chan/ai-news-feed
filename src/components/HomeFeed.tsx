@@ -8,6 +8,7 @@ import type { GlossaryEntry } from '../lib/glossary'
 import { getFeedRoleFilter, setFeedRoleFilter, type ProfessionalRole } from '../lib/roles'
 import type { FeedItem, SortOption, TrendingKeyword } from '../types'
 import { MobileQuickLinks } from './MobileQuickLinks'
+import { KeywordYoutubeSection } from './KeywordYoutubeSection'
 
 function formatLastUpdated(dateString: string): string {
   const date = new Date(dateString)
@@ -179,6 +180,8 @@ export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean 
               onBookmarkChange={() => {}}
               emptyMessage={emptyMessage}
             />
+
+            <KeywordYoutubeSection keyword={selectedKeyword} />
           </section>
         </div>
       </div>

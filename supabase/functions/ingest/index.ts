@@ -57,7 +57,54 @@ interface SummaryResponse {
   keywords: string[];
   roles: string[];
   try_this: string | null;
+  key_points: string[];
   relevant?: boolean;
+}
+
+function extractYouTubeVideoId(url: string): string | null {
+  const match = url.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{11})/
+  );
+  return match?.[1] ?? null;
+}
+
+async function fetchYouTubeVideoContext(
+  videoUrl: string | null | undefined,
+  youtubeApiKey: string | null
+): Promise<string> {
+  if (!videoUrl || !youtubeApiKey) return "";
+  const videoId = extractYouTubeVideoId(videoUrl);
+  if (!videoId) return "";
+
+  try {
+    const apiUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+    apiUrl.searchParams.set("part", "snippet");
+    apiUrl.searchParams.set("id", videoId);
+    apiUrl.searchParams.set("key", youtubeApiKey);
+
+    const response = await fetch(apiUrl.toString());
+    if (!response.ok) return "";
+
+    const data = await response.json();
+    const description = data?.items?.[0]?.snippet?.description;
+    return typeof description === "string" ? description.trim().slice(0, 4000) : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeKeyPoints(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  const points: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim().replace(/^[-•*]\s*/, "");
+    if (!trimmed) continue;
+    points.push(trimmed.slice(0, 280));
+    if (points.length >= 5) break;
+  }
+  return points.slice(0, 5);
 }
 
 function toTitleCaseKeyword(value: string): string {
@@ -425,8 +472,13 @@ async function generateSummary(
   title: string,
   sourceName: string,
   apiKey: string,
-  model: string
+  model: string,
+  extraContext = ""
 ): Promise<SummaryResponse | null> {
+  const contextBlock = extraContext
+    ? `\n\nVideo description or transcript excerpt:\n${extraContext}`
+    : "";
+
   const prompt = `You are a helpful assistant summarizing AI news for non-technical professionals.
 
 For the following content, provide:
@@ -435,13 +487,14 @@ For the following content, provide:
 3. 2-3 short normalized Title Case keywords for trending topics (e.g. "AI Agents", "MCP", "Gemini", "ChatGPT") — product names and concrete AI topics only, no generic words like "News"
 4. 0-3 professional roles this story is most relevant to, from exactly this list: ${PROFESSIONAL_ROLES.join(", ")}
 5. If this is a how-to or tutorial video, one concrete "try this" action someone can do in about 2 minutes (e.g. "Open ChatGPT and ask it to…"). Otherwise null.
-6. A relevance flag (true if it's actually about AI/tech for general audiences, false for memes/low-effort/irrelevant content)
+6. 3-5 short plain-English bullet points (key_points): what the video covers and why it matters for work. Each bullet one sentence, no jargon.
+7. A relevance flag (true if it's actually about AI/tech for general audiences, false for memes/low-effort/irrelevant content)
 
 Content Title: "${title}"
-Source: ${sourceName}
+Source: ${sourceName}${contextBlock}
 
 Respond in JSON only:
-{"summary": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "roles": ["..."], "try_this": "..." or null, "relevant": true/false}`;
+{"summary": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "roles": ["..."], "try_this": "..." or null, "key_points": ["...", "..."], "relevant": true/false}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -456,7 +509,7 @@ Respond in JSON only:
         model,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
-        max_tokens: 400,
+        max_tokens: 700,
       }),
     });
 
@@ -486,12 +539,15 @@ Respond in JSON only:
         ? parsed.try_this.trim()
         : null;
 
+    const keyPoints = normalizeKeyPoints(parsed.key_points);
+
     return {
       summary: parsed.summary || null,
       tags: validTags.slice(0, 3),
       keywords,
       roles,
       try_this: tryThis,
+      key_points: keyPoints,
       relevant: parsed.relevant !== false,
     };
   } catch (error) {
@@ -578,6 +634,7 @@ Deno.serve(async (req) => {
       (await getAppSecret(supabase, "OPENROUTER_MODEL")) || DEFAULT_OPENROUTER_MODEL;
 
     const glossaryBudget = { remaining: GLOSSARY_MAX_PER_RUN };
+    const youtubeApiKey = await getAppSecret(supabase, "YOUTUBE_API_KEY");
 
     if (requestBody.mode === "backfill_keywords") {
       if (!openRouterKey) {
@@ -589,11 +646,13 @@ Deno.serve(async (req) => {
 
       const { data: needsEnrichment, error: candidatesError } = await supabase
         .from("feed_items")
-        .select("id, title, source_name, keywords, roles, try_this, enrich_attempts")
+        .select(
+          "id, title, source_name, url, keywords, roles, try_this, key_points, enrich_attempts, enriched_at"
+        )
         .eq("hidden", false)
         .not("summary", "is", null)
-        .is("enriched_at", null)
         .lt("enrich_attempts", 3)
+        .or("enriched_at.is.null,key_points.is.null")
         .order("published_at", { ascending: false })
         .limit(MAX_SUMMARIES_PER_RUN);
 
@@ -606,11 +665,13 @@ Deno.serve(async (req) => {
         await processSummariesInBatches(
           batch,
           async (item) => {
+            const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
             const result = await generateSummary(
               item.title,
               item.source_name,
               openRouterKey,
-              openRouterModel
+              openRouterModel,
+              context
             );
 
             if (!result) {
@@ -622,9 +683,10 @@ Deno.serve(async (req) => {
               return;
             }
 
-            const patch: Record<string, unknown> = {
-              enriched_at: new Date().toISOString(),
-            };
+            const patch: Record<string, unknown> = {};
+            if (!item.enriched_at) {
+              patch.enriched_at = new Date().toISOString();
+            }
 
             if (!item.keywords?.length && result.keywords.length > 0) {
               patch.keywords = result.keywords;
@@ -638,8 +700,16 @@ Deno.serve(async (req) => {
             ) {
               patch.try_this = result.try_this;
             }
+            if (
+              (!item.key_points || item.key_points.length === 0) &&
+              result.key_points.length > 0
+            ) {
+              patch.key_points = result.key_points;
+            }
 
-            await supabase.from("feed_items").update(patch).eq("id", item.id);
+            if (Object.keys(patch).length > 0) {
+              await supabase.from("feed_items").update(patch).eq("id", item.id);
+            }
 
             if (result.keywords?.length) {
               await ensureGlossaryTerms(
@@ -764,7 +834,7 @@ Deno.serve(async (req) => {
     if (openRouterKey) {
       const { data: unsummarized } = await supabase
         .from("feed_items")
-        .select("id, title, source_name")
+        .select("id, title, source_name, url")
         .is("summary", null)
         .eq("hidden", false)
         .order("created_at", { ascending: false })
@@ -774,11 +844,13 @@ Deno.serve(async (req) => {
         await processSummariesInBatches(
           unsummarized,
           async (item) => {
+            const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
             const result = await generateSummary(
               item.title,
               item.source_name,
               openRouterKey,
-              openRouterModel
+              openRouterModel,
+              context
             );
 
             if (result && result.relevant !== false) {
@@ -790,6 +862,7 @@ Deno.serve(async (req) => {
                   keywords: result.keywords,
                   roles: result.roles,
                   try_this: result.try_this,
+                  key_points: result.key_points.length > 0 ? result.key_points : null,
                   summary_model: openRouterModel,
                   summarized_at: new Date().toISOString(),
                   enriched_at: new Date().toISOString(),
