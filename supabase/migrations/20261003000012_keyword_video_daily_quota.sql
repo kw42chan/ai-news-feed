@@ -20,5 +20,5 @@ AS $$
   RETURNING q.uncached_searches;
 $$;
 
-REVOKE ALL ON FUNCTION public.increment_keyword_video_daily_quota(date) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.increment_keyword_video_daily_quota(date) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.increment_keyword_video_daily_quota(date) TO service_role;
