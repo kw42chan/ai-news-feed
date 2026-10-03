@@ -589,10 +589,11 @@ Deno.serve(async (req) => {
 
       const { data: needsEnrichment, error: candidatesError } = await supabase
         .from("feed_items")
-        .select("id, title, source_name, keywords, roles, try_this")
+        .select("id, title, source_name, keywords, roles, try_this, enrich_attempts")
         .eq("hidden", false)
         .not("summary", "is", null)
         .is("enriched_at", null)
+        .lt("enrich_attempts", 3)
         .order("published_at", { ascending: false })
         .limit(MAX_SUMMARIES_PER_RUN);
 
@@ -613,6 +614,11 @@ Deno.serve(async (req) => {
             );
 
             if (!result) {
+              const attempts = (item.enrich_attempts ?? 0) + 1;
+              await supabase
+                .from("feed_items")
+                .update({ enrich_attempts: attempts })
+                .eq("id", item.id);
               return;
             }
 

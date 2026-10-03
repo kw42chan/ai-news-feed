@@ -19,6 +19,7 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showRoleOnMobile, setShowRoleOnMobile] = useState(false)
 
   const isValidEmail = EMAIL_REGEX.test(email) && email.length <= 254
 
@@ -158,7 +159,33 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
               )}
             </button>
           </div>
-          <div className={compactOnMobile ? 'max-sm:hidden' : ''}>
+          {compactOnMobile ? (
+            <div className="max-sm:block sm:hidden">
+              {!showRoleOnMobile ? (
+                <button
+                  type="button"
+                  className="text-[12px] font-medium text-signal hover:underline"
+                  onClick={() => setShowRoleOnMobile(true)}
+                >
+                  Add your role (optional)
+                </button>
+              ) : (
+                <ChipSelect
+                  id="signup-role-mobile"
+                  value={role}
+                  prefix="Role"
+                  aria-label="Your role (optional)"
+                  options={[
+                    { value: '', label: 'Optional' },
+                    ...PROFESSIONAL_ROLES.map((r) => ({ value: r, label: r })),
+                  ]}
+                  onChange={(value) => setRole(value as ProfessionalRole | '')}
+                  disabled={isSubmitting}
+                />
+              )}
+            </div>
+          ) : null}
+          <div className={compactOnMobile ? 'hidden sm:block' : ''}>
             <ChipSelect
               id="signup-role"
               value={role}

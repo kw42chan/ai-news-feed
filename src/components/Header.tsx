@@ -1,11 +1,15 @@
-import { Zap } from 'lucide-react'
+import { Zap, Bookmark } from 'lucide-react'
 import { navigateTo } from '../lib/routing'
+import { useDigestInView } from '../lib/useDigestInView'
 
 interface HeaderProps {
   hasWeeklyRecap?: boolean
 }
 
 export function Header({ hasWeeklyRecap = false }: HeaderProps) {
+  const digestInView = useDigestInView()
+  const hideMobileJoin = digestInView
+
   return (
     <header className="sticky top-0 z-50 bg-paper border-b border-border">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
@@ -25,7 +29,7 @@ export function Header({ hasWeeklyRecap = false }: HeaderProps) {
           </button>
 
           <nav
-            className="flex items-center gap-3 sm:gap-4 shrink-0 whitespace-nowrap"
+            className="flex items-center gap-2 sm:gap-4 shrink-0 whitespace-nowrap"
             aria-label="Primary"
           >
             {hasWeeklyRecap && (
@@ -46,6 +50,14 @@ export function Header({ hasWeeklyRecap = false }: HeaderProps) {
             </button>
             <button
               type="button"
+              onClick={() => navigateTo('/saved')}
+              className="sm:hidden p-2 rounded-md text-stone hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal"
+              aria-label="Saved stories"
+            >
+              <Bookmark className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
               onClick={() => navigateTo('/#digest')}
               className="hidden sm:inline text-[14px] font-medium text-stone hover:text-signal transition-colors"
             >
@@ -54,7 +66,7 @@ export function Header({ hasWeeklyRecap = false }: HeaderProps) {
             <button
               type="button"
               onClick={() => navigateTo('/#digest')}
-              className="btn-primary text-[13px] sm:text-[14px] py-2 px-3 sm:px-4 whitespace-nowrap"
+              className={`btn-primary text-[13px] sm:text-[14px] py-2 px-3 sm:px-4 whitespace-nowrap ${hideMobileJoin ? 'max-sm:hidden' : ''}`}
             >
               <span className="sm:hidden">Join</span>
               <span className="hidden sm:inline">Join the list</span>

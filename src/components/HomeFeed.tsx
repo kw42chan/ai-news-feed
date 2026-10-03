@@ -7,6 +7,7 @@ import { loadGlossary } from '../lib/glossary'
 import type { GlossaryEntry } from '../lib/glossary'
 import { getFeedRoleFilter, setFeedRoleFilter, type ProfessionalRole } from '../lib/roles'
 import type { FeedItem, SortOption, TrendingKeyword } from '../types'
+import { MobileQuickLinks } from './MobileQuickLinks'
 
 function formatLastUpdated(dateString: string): string {
   const date = new Date(dateString)
@@ -24,7 +25,7 @@ function formatLastUpdated(dateString: string): string {
   return `Updated ${diffDays} day${diffDays === 1 ? '' : 's'} ago`
 }
 
-export function HomeFeed() {
+export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean }) {
   const [items, setItems] = useState<FeedItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -156,6 +157,7 @@ export function HomeFeed() {
             aria-labelledby="feed-title"
             className="pb-20 max-sm:pb-12 lg:col-start-1 lg:row-start-2 min-w-0 max-sm:-mt-1"
           >
+            <MobileQuickLinks hasWeeklyRecap={hasWeeklyRecap} className="mb-3 -mt-1" />
             <FilterBar
               sort={sort}
               selectedKeyword={selectedKeyword}

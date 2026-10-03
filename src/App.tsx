@@ -33,7 +33,7 @@ function App() {
     <div className="min-h-screen bg-mist flex flex-col">
       <Header hasWeeklyRecap={hasWeeklyRecap} />
       <div className="flex-1 w-full">
-        {route.name === 'home' && <HomeFeed />}
+        {route.name === 'home' && <HomeFeed hasWeeklyRecap={hasWeeklyRecap} />}
         {route.name === 'weekly' && (
           <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
             <WeeklyPage />
@@ -46,7 +46,7 @@ function App() {
           </div>
         )}
       </div>
-      <Footer />
+      <Footer hasWeeklyRecap={hasWeeklyRecap} />
     </div>
   )
 }
