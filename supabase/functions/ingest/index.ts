@@ -107,12 +107,43 @@ function normalizeKeyPoints(raw: unknown): string[] {
   return points.slice(0, 5);
 }
 
+const KEYWORD_CANONICAL_LOWER: Record<string, string> = {
+  ai: "AI",
+  api: "API",
+  chatgpt: "ChatGPT",
+  deepseek: "DeepSeek",
+  iphone: "iPhone",
+  llm: "LLM",
+  mcp: "MCP",
+  nvidia: "NVIDIA",
+  openai: "OpenAI",
+  youtube: "YouTube",
+};
+
+function formatKeywordToken(word: string): string {
+  const trimmed = word.trim();
+  if (!trimmed) return "";
+
+  const canonical = KEYWORD_CANONICAL_LOWER[trimmed.toLowerCase()];
+  if (canonical) return canonical;
+
+  if (/[A-Z]/.test(trimmed) || /\d/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^gpt-/i.test(trimmed)) {
+    return `GPT-${trimmed.slice(4)}`;
+  }
+
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
 function toTitleCaseKeyword(value: string): string {
   return value
     .trim()
     .split(/\s+/)
     .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .map((word) => formatKeywordToken(word))
     .join(" ");
 }
 

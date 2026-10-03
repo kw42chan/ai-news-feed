@@ -1,3 +1,5 @@
+import { decodeHtmlEntities } from './decodeHtmlEntities'
+
 export interface KeywordYoutubeVideo {
   videoId: string
   title: string
@@ -28,7 +30,13 @@ export async function fetchKeywordYoutubeVideos(
     if (!response.ok) return []
 
     const data = (await response.json()) as { videos?: KeywordYoutubeVideo[] }
-    return Array.isArray(data.videos) ? data.videos : []
+    if (!Array.isArray(data.videos)) return []
+
+    return data.videos.map((video) => ({
+      ...video,
+      title: decodeHtmlEntities(video.title),
+      channelTitle: decodeHtmlEntities(video.channelTitle),
+    }))
   } catch {
     return []
   }

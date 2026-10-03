@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
 
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: items, error: itemsError } = await supabase
+    const { data: feedItems, error: itemsError } = await supabase
       .from("feed_items")
       .select("id, title, summary, engagement_score, published_at, source, hidden")
       .eq("hidden", false)
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
 
     if (itemsError) throw itemsError;
 
-    const visible = (items || []).filter((item) => item.summary);
+    const visible = (feedItems || []).filter((item) => item.summary);
     if (visible.length === 0) {
       return new Response(JSON.stringify({ success: true, skipped: "no_items" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -188,9 +188,9 @@ Respond in JSON only:
     const parsed = JSON.parse(jsonMatch[0]);
     const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
     const intro = typeof parsed.intro === "string" ? parsed.intro.trim() : "";
-    const items = sanitizeRecapItems(parsed.items);
+    const recapItems = sanitizeRecapItems(parsed.items);
 
-    if (!title || !intro || items.length === 0) {
+    if (!title || !intro || recapItems.length === 0) {
       return new Response(
         JSON.stringify({ success: false, skipped: "invalid_model_response" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -204,7 +204,7 @@ Respond in JSON only:
         week_start: weekStart,
         title,
         intro,
-        items,
+        items: recapItems,
       },
       { onConflict: "week_start" }
     );
