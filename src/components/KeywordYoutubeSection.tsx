@@ -17,7 +17,7 @@ function formatRelativeDate(dateString: string): string {
 
 function SkeletonRow() {
   return (
-    <div className="flex gap-3 max-sm:min-w-[11rem] max-sm:shrink-0 sm:min-w-0 animate-pulse">
+    <div className="flex gap-3 max-sm:w-[15rem] max-sm:shrink-0 sm:min-w-0 animate-pulse">
       <div className="w-20 h-[45px] rounded-md bg-mist shrink-0" />
       <div className="flex-1 min-w-0 space-y-2 py-1">
         <div className="h-3 bg-mist rounded w-2/3" />
@@ -79,7 +79,7 @@ export function KeywordYoutubeSection({ keyword }: KeywordYoutubeSectionProps) {
               href={`https://www.youtube.com/watch?v=${video.videoId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex gap-2.5 items-start group min-w-0 max-sm:min-w-[11rem] max-sm:shrink-0 card p-2.5"
+              className="flex gap-2.5 items-start group min-w-0 max-sm:w-[15rem] max-sm:max-w-[15rem] max-sm:shrink-0 card p-2.5"
             >
               <img
                 src={video.thumbnail}
@@ -92,7 +92,7 @@ export function KeywordYoutubeSection({ keyword }: KeywordYoutubeSectionProps) {
                   {video.channelTitle}
                   {video.publishedAt ? ` · ${formatRelativeDate(video.publishedAt)}` : ''}
                 </p>
-                <p className="text-[13px] leading-snug text-ink group-hover:text-signal transition-colors line-clamp-2">
+                <p className="text-[13px] leading-snug text-ink group-hover:text-signal transition-colors line-clamp-2 break-words">
                   {video.title}
                 </p>
               </div>

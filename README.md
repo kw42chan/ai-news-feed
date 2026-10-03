@@ -150,6 +150,7 @@ Before running the cron migration, add these secrets to Vault:
 -- In Supabase SQL Editor
 SELECT vault.create_secret('https://gmfzwuunaqzutbhudsxn.supabase.co', 'SUPABASE_URL');
 SELECT vault.create_secret('your-anon-key', 'SUPABASE_ANON_KEY');
+SELECT vault.create_secret('sb_publishable_...', 'SUPABASE_PUBLISHABLE_KEY');
 SELECT vault.create_secret('your-openrouter-api-key', 'OPENROUTER_API_KEY');
 ```
 
@@ -159,7 +160,7 @@ SELECT vault.create_secret('your-openrouter-api-key', 'OPENROUTER_API_KEY');
 supabase functions deploy ingest --verify-jwt
 ```
 
-**`keyword-videos` (YouTube discovery for trending chips):** JWT verification must be **off** at the gateway (publishable keys are not JWTs). The function validates the `apikey` header against `SUPABASE_ANON_KEY` (or vault). Deploy with:
+**`keyword-videos` (YouTube discovery for trending chips):** JWT verification must be **off** at the gateway (publishable keys are not JWTs). The function validates the `apikey` header against **`SUPABASE_PUBLISHABLE_KEY`** (same value as `VITE_SUPABASE_PUBLISHABLE_KEY` on Vercel) **or** legacy **`SUPABASE_ANON_KEY`** (function env or Vault). Deploy with:
 
 ```bash
 supabase functions deploy keyword-videos --no-verify-jwt

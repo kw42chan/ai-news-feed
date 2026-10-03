@@ -27,22 +27,30 @@ async function getAppSecret(
   return data;
 }
 
-async function getExpectedClientApiKey(
+async function getAcceptedClientApiKeys(
   supabase: ReturnType<typeof createClient>
-): Promise<string | null> {
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+
+  const envPublishable = Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+  if (envPublishable) keys.add(envPublishable);
+
   const envAnon = Deno.env.get("SUPABASE_ANON_KEY");
-  if (envAnon) return envAnon;
+  if (envAnon) keys.add(envAnon);
+
+  const vaultPublishable = await getAppSecret(supabase, "SUPABASE_PUBLISHABLE_KEY");
+  if (vaultPublishable) keys.add(vaultPublishable);
 
   const vaultAnon = await getAppSecret(supabase, "SUPABASE_ANON_KEY");
-  if (vaultAnon) return vaultAnon;
+  if (vaultAnon) keys.add(vaultAnon);
 
-  return await getAppSecret(supabase, "SUPABASE_PUBLISHABLE_KEY");
+  return keys;
 }
 
-function isValidClientKey(req: Request, expectedKey: string | null): boolean {
-  if (!expectedKey) return false;
+function isValidClientKey(req: Request, acceptedKeys: Set<string>): boolean {
+  if (acceptedKeys.size === 0) return false;
   const apikey = req.headers.get("apikey");
-  return apikey === expectedKey;
+  return apikey !== null && acceptedKeys.has(apikey);
 }
 
 function normalizeKeyword(keyword: string): string {
@@ -142,13 +150,16 @@ async function getDailyUncachedCount(
 
 async function incrementDailyUncachedCount(
   supabase: ReturnType<typeof createClient>
-): Promise<void> {
+): Promise<number | null> {
   const day = utcDayString();
-  const current = await getDailyUncachedCount(supabase);
-  await supabase.from("keyword_video_daily_quota").upsert(
-    { day, uncached_searches: current + 1 },
-    { onConflict: "day" }
-  );
+  const { data, error } = await supabase.rpc("increment_keyword_video_daily_quota", {
+    p_day: day,
+  });
+  if (error) {
+    console.error("increment_keyword_video_daily_quota error:", error);
+    return null;
+  }
+  return typeof data === "number" ? data : null;
 }
 
 async function feedVideoIdsAmongCandidates(
@@ -253,8 +264,8 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const expectedClientKey = await getExpectedClientApiKey(supabase);
-    if (!isValidClientKey(req, expectedClientKey)) {
+    const acceptedClientKeys = await getAcceptedClientApiKeys(supabase);
+    if (!isValidClientKey(req, acceptedClientKeys)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
