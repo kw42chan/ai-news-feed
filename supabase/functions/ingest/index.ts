@@ -700,11 +700,13 @@ Deno.serve(async (req) => {
             ) {
               patch.try_this = result.try_this;
             }
-            if (
-              (!item.key_points || item.key_points.length === 0) &&
-              result.key_points.length > 0
-            ) {
-              patch.key_points = result.key_points;
+            if (!item.key_points || item.key_points.length === 0) {
+              if (result.key_points.length > 0) {
+                patch.key_points = result.key_points;
+              } else {
+                patch.key_points = [];
+                patch.enrich_attempts = (item.enrich_attempts ?? 0) + 1;
+              }
             }
 
             if (Object.keys(patch).length > 0) {

@@ -20,7 +20,7 @@ export async function fetchKeywordYoutubeVideos(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${supabaseKey}`,
+        apikey: supabaseKey,
       },
       body: JSON.stringify({ keyword }),
     })

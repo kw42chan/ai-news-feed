@@ -81,8 +81,8 @@ export function StoryPage({ id }: StoryPageProps) {
             Key points
           </h2>
           <ul className="list-disc pl-5 space-y-2 text-[16px] leading-relaxed text-stone">
-            {item.key_points.map((point) => (
-              <li key={point}>{point}</li>
+            {item.key_points.map((point, index) => (
+              <li key={index}>{point}</li>
             ))}
           </ul>
         </section>

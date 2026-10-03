@@ -153,11 +153,21 @@ SELECT vault.create_secret('your-anon-key', 'SUPABASE_ANON_KEY');
 SELECT vault.create_secret('your-openrouter-api-key', 'OPENROUTER_API_KEY');
 ```
 
-### 4. Deploy Edge Function
+### 4. Deploy Edge Functions
 
 ```bash
 supabase functions deploy ingest --verify-jwt
 ```
+
+**`keyword-videos` (YouTube discovery for trending chips):** JWT verification must be **off** at the gateway (publishable keys are not JWTs). The function validates the `apikey` header against `SUPABASE_ANON_KEY` (or vault). Deploy with:
+
+```bash
+supabase functions deploy keyword-videos --no-verify-jwt
+```
+
+(`supabase/config.toml` sets `[functions.keyword-videos] verify_jwt = false` for local CLI deploys.)
+
+Apply migration `20261003000012_keyword_video_daily_quota.sql` before deploying `keyword-videos` (daily uncached search cap).
 
 ### 5. Test Ingestion
 

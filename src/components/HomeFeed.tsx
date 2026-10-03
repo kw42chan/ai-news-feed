@@ -170,6 +170,8 @@ export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean 
               onFeedRoleFilterChange={handleRoleFilterChange}
             />
 
+            <KeywordYoutubeSection keyword={selectedKeyword} />
+
             <FeedList
               items={items}
               isLoading={isLoading}
@@ -180,8 +182,6 @@ export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean 
               onBookmarkChange={() => {}}
               emptyMessage={emptyMessage}
             />
-
-            <KeywordYoutubeSection keyword={selectedKeyword} />
           </section>
         </div>
       </div>

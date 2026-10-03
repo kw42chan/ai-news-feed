@@ -320,6 +320,15 @@ button, input {
   border-color: var(--color-signal);
 }
 
+.keyword-youtube-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.keyword-youtube-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .glossary-hint {
   padding-left: 2px;
   border-left: 2px solid var(--color-border);
