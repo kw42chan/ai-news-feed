@@ -42,7 +42,37 @@ interface FeedItem {
 interface SummaryResponse {
   summary: string;
   tags: string[];
+  keywords: string[];
   relevant?: boolean;
+}
+
+function toTitleCaseKeyword(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function normalizeKeywords(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const normalized = toTitleCaseKeyword(entry);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+    if (result.length >= 3) break;
+  }
+
+  return result;
 }
 
 const corsHeaders = {
@@ -286,13 +316,14 @@ async function generateSummary(
 For the following content, provide:
 1. A ONE plain-English sentence (max 25 words) explaining "what this means for you" - no jargon, no hype, just practical impact
 2. 1-3 tags from this list: ${VALID_TAGS.join(", ")}
-3. A relevance flag (true if it's actually about AI/tech for general audiences, false for memes/low-effort/irrelevant content)
+3. 2-3 short normalized Title Case keywords for trending topics (e.g. "AI Agents", "MCP", "Gemini", "ChatGPT") — product names and concrete AI topics only, no generic words like "News"
+4. A relevance flag (true if it's actually about AI/tech for general audiences, false for memes/low-effort/irrelevant content)
 
 Content Title: "${title}"
 Source: ${sourceName}
 
 Respond in JSON only:
-{"summary": "...", "tags": ["...", "..."], "relevant": true/false}`;
+{"summary": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "relevant": true/false}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -307,7 +338,7 @@ Respond in JSON only:
         model,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
-        max_tokens: 200,
+        max_tokens: 280,
       }),
     });
 
@@ -330,9 +361,12 @@ Respond in JSON only:
       VALID_TAGS.includes(t as (typeof VALID_TAGS)[number])
     );
 
+    const keywords = normalizeKeywords(parsed.keywords);
+
     return {
       summary: parsed.summary || null,
       tags: validTags.slice(0, 3),
+      keywords,
       relevant: parsed.relevant !== false,
     };
   } catch (error) {
@@ -402,9 +436,79 @@ Deno.serve(async (req) => {
       );
     }
 
+    let requestBody: { mode?: string } = {};
+    if (req.method === "POST") {
+      const rawBody = await req.text();
+      if (rawBody) {
+        try {
+          requestBody = JSON.parse(rawBody) as { mode?: string };
+        } catch {
+          requestBody = {};
+        }
+      }
+    }
+
     const openRouterKey = await getAppSecret(supabase, "OPENROUTER_API_KEY");
     const openRouterModel =
       (await getAppSecret(supabase, "OPENROUTER_MODEL")) || DEFAULT_OPENROUTER_MODEL;
+
+    if (requestBody.mode === "backfill_keywords") {
+      if (!openRouterKey) {
+        return new Response(
+          JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const openRouterModel =
+        (await getAppSecret(supabase, "OPENROUTER_MODEL")) || DEFAULT_OPENROUTER_MODEL;
+
+      const { data: needsKeywords, error: needsKeywordsError } = await supabase
+        .from("feed_items")
+        .select("id, title, source_name")
+        .eq("hidden", false)
+        .not("summary", "is", null)
+        .eq("keywords", [])
+        .order("published_at", { ascending: false })
+        .limit(MAX_SUMMARIES_PER_RUN);
+
+      if (needsKeywordsError) throw needsKeywordsError;
+
+      let itemsKeywordsFilled = 0;
+
+      if (needsKeywords && needsKeywords.length > 0) {
+        await processSummariesInBatches(
+          needsKeywords,
+          async (item) => {
+            const result = await generateSummary(
+              item.title,
+              item.source_name,
+              openRouterKey,
+              openRouterModel
+            );
+
+            if (result && result.keywords.length > 0) {
+              await supabase
+                .from("feed_items")
+                .update({ keywords: result.keywords })
+                .eq("id", item.id);
+              itemsKeywordsFilled++;
+            }
+          },
+          SUMMARY_CONCURRENCY
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "backfill_keywords",
+          itemsKeywordsFilled,
+          durationMs: Date.now() - startTime,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const redditClientId = await getAppSecret(supabase, "REDDIT_CLIENT_ID");
     const redditClientSecret = await getAppSecret(supabase, "REDDIT_CLIENT_SECRET");
@@ -526,6 +630,7 @@ Deno.serve(async (req) => {
                 .update({
                   summary: result.summary,
                   tags: result.tags,
+                  keywords: result.keywords,
                   summary_model: openRouterModel,
                   summarized_at: new Date().toISOString(),
                 })

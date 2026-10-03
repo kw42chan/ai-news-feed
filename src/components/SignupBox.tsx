@@ -108,7 +108,7 @@ export function SignupBox() {
           />
           <button
             type="submit"
-            disabled={isSubmitting || !email}
+            disabled={isSubmitting}
             className="btn-primary whitespace-nowrap max-sm:w-full"
           >
             {isSubmitting ? (

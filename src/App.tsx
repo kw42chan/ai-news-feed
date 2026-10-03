@@ -4,18 +4,8 @@ import { SignupBox } from './components/SignupBox'
 import { FilterBar } from './components/FilterBar'
 import { FeedList } from './components/FeedList'
 import { Footer } from './components/Footer'
-import { fetchFeed, getLastUpdated } from './lib/feed'
-import type { FeedItem, SortOption } from './types'
-
-const AVAILABLE_TAGS = [
-  'tools',
-  'work & productivity',
-  'business',
-  'policy & safety',
-  'big tech',
-  'how-to',
-  'creative',
-]
+import { fetchFeed, fetchTrendingKeywords, getLastUpdated } from './lib/feed'
+import type { FeedItem, SortOption, TrendingKeyword } from './types'
 
 function formatLastUpdated(dateString: string): string {
   const date = new Date(dateString)
@@ -43,7 +33,14 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
   const [sort, setSort] = useState<SortOption>('latest')
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null)
+  const [trendingKeywords, setTrendingKeywords] = useState<TrendingKeyword[]>([])
+
+  useEffect(() => {
+    fetchTrendingKeywords()
+      .then(setTrendingKeywords)
+      .catch(() => setTrendingKeywords([]))
+  }, [])
 
   const loadFeed = useCallback(async (reset = true) => {
     if (reset) {
@@ -57,7 +54,7 @@ function App() {
 
     try {
       const response = await fetchFeed({
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
+        keyword: selectedKeyword ?? undefined,
         sort,
         cursor: reset ? undefined : cursor ?? undefined,
       })
@@ -80,22 +77,18 @@ function App() {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }, [sort, selectedTags, cursor])
+  }, [sort, selectedKeyword, cursor])
 
   useEffect(() => {
     loadFeed(true)
-  }, [sort, selectedTags])
+  }, [sort, selectedKeyword])
 
   const handleSortChange = (newSort: SortOption) => {
     setSort(newSort)
   }
 
-  const handleTagToggle = (tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    )
+  const handleKeywordSelect = (keyword: string | null) => {
+    setSelectedKeyword(keyword)
   }
 
   const handleLoadMore = () => {
@@ -107,12 +100,10 @@ function App() {
       <Header />
       
       <main id="top">
-        {/* Hero section - no gradient, no eyebrow pill */}
         <section className="py-16 max-sm:py-10">
           <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
             <div className="grid grid-cols-[1fr_380px] gap-12 items-start max-lg:grid-cols-1 max-lg:gap-8">
               <div>
-                {/* Headline - uniform color, no accent on specific phrase */}
                 <h1 className="font-display text-[42px] max-sm:text-[32px] font-semibold leading-[1.1] tracking-tight text-ink mb-4">
                   AI news for busy professionals, in plain English
                 </h1>
@@ -131,15 +122,14 @@ function App() {
           </div>
         </section>
 
-        {/* Feed section */}
         <section id="feed" aria-labelledby="feed-title" className="pb-20 max-sm:pb-12">
           <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
             <FilterBar
               sort={sort}
-              selectedTags={selectedTags}
-              availableTags={AVAILABLE_TAGS}
+              selectedKeyword={selectedKeyword}
+              trendingKeywords={trendingKeywords}
               onSortChange={handleSortChange}
-              onTagToggle={handleTagToggle}
+              onKeywordSelect={handleKeywordSelect}
             />
 
             <FeedList

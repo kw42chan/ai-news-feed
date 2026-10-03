@@ -41,45 +41,40 @@ export function FeedCard({ item }: FeedCardProps) {
         href={item.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="block"
+        className="flex flex-col gap-3 p-3 max-sm:p-3 sm:flex-row sm:gap-4 sm:p-4"
       >
-        {/* Thumbnail */}
-        <div className="relative aspect-video overflow-hidden bg-mist">
+        <div className="relative shrink-0 w-full max-sm:max-w-none sm:w-[140px] sm:h-[79px] rounded-md overflow-hidden bg-mist max-sm:aspect-video max-sm:h-auto">
           {item.thumbnail && (
             <img
               src={item.thumbnail}
               alt=""
               loading="lazy"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover max-sm:aspect-video sm:absolute sm:inset-0"
             />
           )}
         </div>
 
-        <div className="p-4">
-          {/* Meta row: channel, time - using comma, not middle dot */}
-          <div className="flex items-center gap-1.5 text-[13px] text-meta mb-2">
+        <div className="flex-1 min-w-0 flex flex-col">
+          <p className="flex items-center flex-wrap text-[13px] text-meta mb-2 gap-x-1">
             <YouTubeIcon className="w-4 h-4 text-[#FF0000] shrink-0" />
             <span className="font-medium text-stone">{item.source_name}</span>
-            <span>,</span>
+            <span aria-hidden="true">·</span>
             <span>{formatRelativeTime(item.published_at)}</span>
-          </div>
+          </p>
 
-          {/* Title - secondary to summary */}
-          <h3 className="text-[15px] font-semibold leading-snug text-ink line-clamp-2 mb-3">
-            {item.title}
-          </h3>
-
-          {/* Summary box - THE HERO, THE ONE BOLD ELEMENT */}
           {item.summary && (
-            <div className="summary-box mb-3">
-              <p className="text-[15px] leading-relaxed text-stone line-clamp-4">
+            <div className="summary-box mb-2">
+              <p className="text-[17px] leading-snug text-ink line-clamp-4 font-medium">
                 {item.summary}
               </p>
             </div>
           )}
 
-          {/* Footer: tags, views - comma separated */}
-          <div className="flex items-center justify-between gap-2 text-[12px] text-meta">
+          <h3 className="text-[14px] font-medium leading-snug text-stone line-clamp-2 mb-2">
+            {item.title}
+          </h3>
+
+          <div className="flex items-center justify-between gap-2 text-[12px] text-meta mt-auto">
             {item.tags.length > 0 && (
               <span className="truncate">
                 {item.tags.slice(0, 2).join(', ')}

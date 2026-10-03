@@ -13,7 +13,9 @@ export function Header() {
             <span className="w-7 h-7 rounded-md bg-signal text-white grid place-items-center">
               <Zap className="w-4 h-4" />
             </span>
-            <span className="max-sm:hidden">AI News, Minus the Noise</span>
+            <span className="text-[14px] max-sm:text-[13px] leading-tight truncate max-w-[52vw] sm:max-w-none">
+              AI News, Minus the Noise
+            </span>
           </a>
           
           <nav className="flex items-center gap-4" aria-label="Primary">

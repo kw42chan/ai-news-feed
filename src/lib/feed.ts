@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { FeedItem, FetchFeedOptions, FeedResponse, Source } from '../types'
+import type { FeedItem, FetchFeedOptions, FeedResponse, Source, TrendingKeyword } from '../types'
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -7,6 +7,7 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
   const {
     sourceIds,
     tags,
+    keyword,
     source,
     sort = 'latest',
     cursor,
@@ -16,7 +17,6 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
   let query = supabase
     .from('feed_items')
     .select('*')
-    // Only show items with summaries that aren't hidden (RLS also enforces this)
     .eq('hidden', false)
     .not('summary', 'is', null)
 
@@ -31,6 +31,10 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
 
   if (tags && tags.length > 0) {
     query = query.overlaps('tags', tags)
+  }
+
+  if (keyword) {
+    query = query.contains('keywords', [keyword])
   }
 
   if (sort === 'latest') {
@@ -54,7 +58,6 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
     throw new Error(`Failed to fetch feed: ${error.message}`)
   }
 
-  // Defensive client-side filter: only show YouTube items
   const allItems = (data || []) as FeedItem[]
   const youtubeItems = allItems.filter(item => item.source === 'youtube')
 
@@ -69,6 +72,22 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
     nextCursor,
     hasMore,
   }
+}
+
+export async function fetchTrendingKeywords(
+  days = 7,
+  maxCount = 12
+): Promise<TrendingKeyword[]> {
+  const { data, error } = await supabase.rpc('trending_keywords', {
+    days,
+    max_count: maxCount,
+  })
+
+  if (error) {
+    throw new Error(`Failed to fetch trending keywords: ${error.message}`)
+  }
+
+  return (data || []) as TrendingKeyword[]
 }
 
 export async function fetchSources(): Promise<Source[]> {

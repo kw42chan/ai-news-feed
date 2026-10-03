@@ -30,6 +30,7 @@ export interface FeedItem {
   summary_model: string | null
   summarized_at: string | null
   tags: string[]
+  keywords: string[]
   hidden: boolean
   created_at: string
   updated_at: string
@@ -47,10 +48,16 @@ export interface FeedFilters {
 export interface FetchFeedOptions {
   sourceIds?: string[]
   tags?: string[]
+  keyword?: string
   source?: SourceKind | SourceKind[]
   sort?: SortOption
   cursor?: string
   limit?: number
+}
+
+export interface TrendingKeyword {
+  keyword: string
+  count: number
 }
 
 export interface FeedResponse {

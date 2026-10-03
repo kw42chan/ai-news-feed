@@ -56,14 +56,14 @@ export function FeedList({
 
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="flex flex-col gap-4 max-w-3xl">
         {items.map((item) => (
           <FeedCard key={item.id} item={item} />
         ))}
       </div>
 
       {hasMore && (
-        <div className="flex justify-center mt-10">
+        <div className="flex justify-center mt-10 max-w-3xl">
           <button
             onClick={onLoadMore}
             disabled={isLoadingMore}

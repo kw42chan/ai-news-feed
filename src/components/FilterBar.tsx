@@ -1,12 +1,12 @@
-import type { SortOption } from '../types'
+import type { SortOption, TrendingKeyword } from '../types'
 import { Clock, TrendingUp } from 'lucide-react'
 
 interface FilterBarProps {
   sort: SortOption
-  selectedTags: string[]
-  availableTags: string[]
+  selectedKeyword: string | null
+  trendingKeywords: TrendingKeyword[]
   onSortChange: (sort: SortOption) => void
-  onTagToggle: (tag: string) => void
+  onKeywordSelect: (keyword: string | null) => void
 }
 
 const sortOptions: { value: SortOption; label: string; icon: React.ReactNode }[] = [
@@ -16,11 +16,13 @@ const sortOptions: { value: SortOption; label: string; icon: React.ReactNode }[]
 
 export function FilterBar({
   sort,
-  selectedTags,
-  availableTags,
+  selectedKeyword,
+  trendingKeywords,
   onSortChange,
-  onTagToggle,
+  onKeywordSelect,
 }: FilterBarProps) {
+  const showKeywords = trendingKeywords.length > 0
+
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-5">
@@ -42,18 +44,27 @@ export function FilterBar({
         </div>
       </div>
 
-      {availableTags.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by topic">
-          {availableTags.map((tag) => {
-            const isActive = selectedTags.includes(tag)
+      {showKeywords && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by keyword">
+          <button
+            type="button"
+            onClick={() => onKeywordSelect(null)}
+            aria-pressed={selectedKeyword === null}
+            className={`chip ${selectedKeyword === null ? 'chip-active' : ''}`}
+          >
+            All
+          </button>
+          {trendingKeywords.map(({ keyword }) => {
+            const isActive = selectedKeyword === keyword
             return (
               <button
-                key={tag}
-                onClick={() => onTagToggle(tag)}
+                key={keyword}
+                type="button"
+                onClick={() => onKeywordSelect(keyword)}
                 aria-pressed={isActive}
                 className={`chip ${isActive ? 'chip-active' : ''}`}
               >
-                {tag}
+                {keyword}
               </button>
             )
           })}
