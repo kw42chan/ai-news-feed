@@ -1,7 +1,11 @@
+import { useState } from 'react'
 import type { FeedItem } from '../types'
+import { navigateTo } from '../lib/routing'
+import { ShareFallbackBox, StoryActions } from './StoryActions'
 
 interface FeedCardProps {
   item: FeedItem
+  onBookmarkChange?: () => void
 }
 
 function formatRelativeTime(dateString: string): string {
@@ -34,65 +38,114 @@ function YouTubeIcon({ className }: { className?: string }) {
   )
 }
 
-export function FeedCard({ item }: FeedCardProps) {
+function CardThumbnail({ src, className }: { src: string; className?: string }) {
   return (
-    <article className="card overflow-hidden">
-      <a
-        href={item.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block"
-      >
-        {/* Thumbnail */}
-        <div className="relative aspect-video overflow-hidden bg-mist">
-          {item.thumbnail && (
-            <img
-              src={item.thumbnail}
-              alt=""
-              loading="lazy"
-              className="w-full h-full object-cover"
-            />
+    <div className={`relative shrink-0 overflow-hidden rounded-md bg-mist ${className ?? ''}`}>
+      <img src={src} alt="" loading="lazy" className="w-full h-full object-cover" />
+    </div>
+  )
+}
+
+function CardMetaRow({
+  item,
+  onBookmarkChange,
+}: {
+  item: FeedItem
+  onBookmarkChange?: () => void
+}) {
+  const [shareFallbackUrl, setShareFallbackUrl] = useState<string | null>(null)
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 text-[12px] sm:text-[13px] text-meta min-w-0">
+        <div className="flex items-center flex-nowrap gap-x-1 min-w-0 overflow-hidden">
+          <YouTubeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FF0000] shrink-0" />
+          <span className="font-medium text-stone truncate">{item.source_name}</span>
+          <span aria-hidden="true" className="shrink-0">·</span>
+          <span className="shrink-0">{formatRelativeTime(item.published_at)}</span>
+          {item.try_this && (
+            <span className="hidden sm:inline shrink-0">
+              <span aria-hidden="true"> · </span>
+              <span className="text-meta not-italic whitespace-nowrap">2-min tip</span>
+            </span>
           )}
         </div>
+        <StoryActions
+          id={item.id}
+          title={item.title}
+          summary={item.summary}
+          compact
+          className="card-actions shrink-0"
+          onBookmarkChange={onBookmarkChange}
+          onShareFallbackUrl={setShareFallbackUrl}
+        />
+      </div>
+      {shareFallbackUrl && <ShareFallbackBox url={shareFallbackUrl} />}
+    </div>
+  )
+}
 
-        <div className="p-4">
-          {/* Meta row: channel, time - using comma, not middle dot */}
-          <div className="flex items-center gap-1.5 text-[13px] text-meta mb-2">
-            <YouTubeIcon className="w-4 h-4 text-[#FF0000] shrink-0" />
-            <span className="font-medium text-stone">{item.source_name}</span>
-            <span>,</span>
-            <span>{formatRelativeTime(item.published_at)}</span>
-          </div>
+export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
+  const thumbnail = item.thumbnail
 
-          {/* Title - secondary to summary */}
-          <h3 className="text-[15px] font-semibold leading-snug text-ink line-clamp-2 mb-3">
-            {item.title}
-          </h3>
+  const handleOpenStory = () => {
+    navigateTo(`/story/${item.id}`)
+  }
 
-          {/* Summary box - THE HERO, THE ONE BOLD ELEMENT */}
+  return (
+    <article className="card group">
+      <div className="p-3 sm:p-4">
+        <div className="sm:hidden">
           {item.summary && (
-            <div className="summary-box mb-3">
-              <p className="text-[15px] leading-relaxed text-stone line-clamp-4">
-                {item.summary}
-              </p>
-            </div>
+            <button type="button" onClick={handleOpenStory} className="summary-box mb-3 w-full text-left">
+              <p className="text-[17px] leading-snug text-ink line-clamp-5 font-medium">{item.summary}</p>
+            </button>
           )}
 
-          {/* Footer: tags, views - comma separated */}
-          <div className="flex items-center justify-between gap-2 text-[12px] text-meta">
-            {item.tags.length > 0 && (
-              <span className="truncate">
-                {item.tags.slice(0, 2).join(', ')}
-              </span>
+          <div className="flex gap-2.5 items-start mb-2">
+            {thumbnail && (
+              <a href={item.url} target="_blank" rel="noopener noreferrer">
+                <CardThumbnail src={thumbnail} className="w-24 h-[54px]" />
+              </a>
             )}
+            <div className="min-w-0 flex-1">
+              <CardMetaRow item={item} onBookmarkChange={onBookmarkChange} />
+              <a href={item.url} target="_blank" rel="noopener noreferrer" className="block mt-1">
+                <h3 className="text-[13px] font-medium leading-snug text-stone line-clamp-3">{item.title}</h3>
+              </a>
+            </div>
+          </div>
+
+          {item.engagement_score > 0 && (
+            <p className="text-[12px] text-meta tabular-nums">{formatViews(item.engagement_score)}</p>
+          )}
+        </div>
+
+        <div className="hidden sm:flex sm:gap-4">
+          {thumbnail && (
+            <a href={item.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+              <CardThumbnail src={thumbnail} className="w-[140px] h-[79px]" />
+            </a>
+          )}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <CardMetaRow item={item} onBookmarkChange={onBookmarkChange} />
+
+            {item.summary && (
+              <button type="button" onClick={handleOpenStory} className="summary-box mb-2 mt-2 w-full text-left">
+                <p className="text-[17px] leading-snug text-ink line-clamp-4 font-medium">{item.summary}</p>
+              </button>
+            )}
+
+            <a href={item.url} target="_blank" rel="noopener noreferrer">
+              <h3 className="text-[14px] font-medium leading-snug text-stone line-clamp-2 mb-2">{item.title}</h3>
+            </a>
+
             {item.engagement_score > 0 && (
-              <span className="shrink-0 tabular-nums">
-                {formatViews(item.engagement_score)}
-              </span>
+              <p className="text-[12px] text-meta tabular-nums mt-auto">{formatViews(item.engagement_score)}</p>
             )}
           </div>
         </div>
-      </a>
+      </div>
     </article>
   )
 }

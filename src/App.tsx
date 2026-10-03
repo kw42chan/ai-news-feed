@@ -1,160 +1,52 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { Header } from './components/Header'
-import { SignupBox } from './components/SignupBox'
-import { FilterBar } from './components/FilterBar'
-import { FeedList } from './components/FeedList'
 import { Footer } from './components/Footer'
-import { fetchFeed, getLastUpdated } from './lib/feed'
-import type { FeedItem, SortOption } from './types'
-
-const AVAILABLE_TAGS = [
-  'tools',
-  'work & productivity',
-  'business',
-  'policy & safety',
-  'big tech',
-  'how-to',
-  'creative',
-]
-
-function formatLastUpdated(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-
-  if (diffMins < 1) return 'Updated just now'
-  if (diffMins < 60) return `Updated ${diffMins} minute${diffMins === 1 ? '' : 's'} ago`
-  
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `Updated ${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
-  
-  const diffDays = Math.floor(diffHours / 24)
-  return `Updated ${diffDays} day${diffDays === 1 ? '' : 's'} ago`
-}
+import { HomeFeed } from './components/HomeFeed'
+import { WeeklyPage } from './components/WeeklyPage'
+import { SavedFeed } from './components/SavedFeed'
+import { StoryPage } from './components/StoryPage'
+import { fetchLatestWeeklyRecap } from './lib/feed'
+import { useAppRoute } from './lib/routing'
 
 function App() {
-  const [items, setItems] = useState<FeedItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
-
-  const [sort, setSort] = useState<SortOption>('latest')
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-
-  const loadFeed = useCallback(async (reset = true) => {
-    if (reset) {
-      setIsLoading(true)
-      setError(null)
-      setItems([])
-      setCursor(null)
-    } else {
-      setIsLoadingMore(true)
-    }
-
-    try {
-      const response = await fetchFeed({
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
-        sort,
-        cursor: reset ? undefined : cursor ?? undefined,
-      })
-
-      if (reset) {
-        setItems(response.items)
-      } else {
-        setItems(prev => [...prev, ...response.items])
-      }
-      setHasMore(response.hasMore)
-      setCursor(response.nextCursor)
-
-      if (reset) {
-        const updated = await getLastUpdated()
-        setLastUpdated(updated)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load feed')
-    } finally {
-      setIsLoading(false)
-      setIsLoadingMore(false)
-    }
-  }, [sort, selectedTags, cursor])
+  const route = useAppRoute()
+  const [hasWeeklyRecap, setHasWeeklyRecap] = useState(false)
 
   useEffect(() => {
-    loadFeed(true)
-  }, [sort, selectedTags])
+    fetchLatestWeeklyRecap()
+      .then((recap) => setHasWeeklyRecap(!!recap))
+      .catch(() => setHasWeeklyRecap(false))
+  }, [])
 
-  const handleSortChange = (newSort: SortOption) => {
-    setSort(newSort)
-  }
-
-  const handleTagToggle = (tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    )
-  }
-
-  const handleLoadMore = () => {
-    loadFeed(false)
-  }
+  useEffect(() => {
+    if (route.name === 'story') return
+    if (route.name === 'weekly') {
+      document.title = 'This week in AI — AI News, Minus the Noise'
+    } else if (route.name === 'saved') {
+      document.title = 'Saved stories — AI News, Minus the Noise'
+    } else {
+      document.title = 'AI News, Minus the Noise'
+    }
+  }, [route])
 
   return (
-    <div className="min-h-screen bg-mist">
-      <Header />
-      
-      <main id="top">
-        {/* Hero section - no gradient, no eyebrow pill */}
-        <section className="py-16 max-sm:py-10">
-          <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
-            <div className="grid grid-cols-[1fr_380px] gap-12 items-start max-lg:grid-cols-1 max-lg:gap-8">
-              <div>
-                {/* Headline - uniform color, no accent on specific phrase */}
-                <h1 className="font-display text-[42px] max-sm:text-[32px] font-semibold leading-[1.1] tracking-tight text-ink mb-4">
-                  AI news for busy professionals, in plain English
-                </h1>
-                <p className="text-[17px] leading-relaxed text-stone mb-4 max-w-[540px]">
-                  The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
-                </p>
-                {lastUpdated && (
-                  <p className="text-[14px] text-meta">
-                    {formatLastUpdated(lastUpdated)}
-                  </p>
-                )}
-              </div>
-
-              <SignupBox />
-            </div>
+    <div className="min-h-screen bg-mist flex flex-col">
+      <Header hasWeeklyRecap={hasWeeklyRecap} />
+      <div className="flex-1 w-full">
+        {route.name === 'home' && <HomeFeed hasWeeklyRecap={hasWeeklyRecap} />}
+        {route.name === 'weekly' && (
+          <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
+            <WeeklyPage />
           </div>
-        </section>
-
-        {/* Feed section */}
-        <section id="feed" aria-labelledby="feed-title" className="pb-20 max-sm:pb-12">
-          <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
-            <FilterBar
-              sort={sort}
-              selectedTags={selectedTags}
-              availableTags={AVAILABLE_TAGS}
-              onSortChange={handleSortChange}
-              onTagToggle={handleTagToggle}
-            />
-
-            <FeedList
-              items={items}
-              isLoading={isLoading}
-              isLoadingMore={isLoadingMore}
-              error={error}
-              hasMore={hasMore}
-              onLoadMore={handleLoadMore}
-            />
+        )}
+        {route.name === 'saved' && <SavedFeed />}
+        {route.name === 'story' && (
+          <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
+            <StoryPage id={route.id} />
           </div>
-        </section>
-      </main>
-
-      <Footer />
+        )}
+      </div>
+      <Footer hasWeeklyRecap={hasWeeklyRecap} />
     </div>
   )
 }

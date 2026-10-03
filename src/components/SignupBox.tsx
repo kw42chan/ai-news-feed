@@ -1,15 +1,25 @@
 import { useState } from 'react'
 import { Mail, Loader2, CheckCircle } from 'lucide-react'
+import { ChipSelect } from './ChipSelect'
 import { supabase } from '../lib/supabase'
+import {
+  getSignupRolePreference,
+  PROFESSIONAL_ROLES,
+  setSignupRolePreference,
+  type ProfessionalRole,
+} from '../lib/roles'
+import { isSchemaMismatchError } from '../lib/postgrest'
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
-export function SignupBox() {
+export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boolean }) {
   const [email, setEmail] = useState('')
+  const [role, setRole] = useState<ProfessionalRole | ''>(() => getSignupRolePreference() ?? '')
   const [honeypot, setHoneypot] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showRoleOnMobile, setShowRoleOnMobile] = useState(false)
 
   const isValidEmail = EMAIL_REGEX.test(email) && email.length <= 254
 
@@ -30,14 +40,30 @@ export function SignupBox() {
     setIsSubmitting(true)
 
     try {
-      const { error: insertError } = await supabase
-        .from('subscribers')
-        .insert({ email: email.toLowerCase().trim() })
+      const payload: { email: string; role?: string } = {
+        email: email.toLowerCase().trim(),
+      }
+      if (role) payload.role = role
+
+      let { error: insertError } = await supabase.from('subscribers').insert(payload)
+
+      if (
+        insertError &&
+        insertError.code !== '23505' &&
+        role &&
+        isSchemaMismatchError(insertError.message)
+      ) {
+        const retry = await supabase.from('subscribers').insert({
+          email: payload.email,
+        })
+        insertError = retry.error
+      }
 
       if (insertError && insertError.code !== '23505') {
         throw insertError
       }
 
+      setSignupRolePreference(role || null)
       setIsSuccess(true)
     } catch {
       setError('Something went wrong. Please try again.')
@@ -50,12 +76,12 @@ export function SignupBox() {
     return (
       <aside
         id="digest"
-        className="bg-paper border border-border rounded-[12px] p-6 shadow-[var(--shadow-signup)]"
+        className={`bg-paper border border-border rounded-[12px] shadow-[var(--shadow-signup)] ${compactOnMobile ? 'p-3 max-sm:p-3 sm:p-6' : 'p-6'}`}
       >
         <div className="flex items-start gap-3 text-signal">
           <CheckCircle className="w-5 h-5 mt-0.5 shrink-0" />
-          <p className="text-[15px] leading-relaxed text-ink">
-            You're on the list. We'll email you when the first digest goes out.
+          <p className="text-[14px] sm:text-[15px] leading-relaxed text-ink">
+            You&apos;re on the list. We&apos;ll email you when the first digest goes out.
           </p>
         </div>
       </aside>
@@ -66,19 +92,30 @@ export function SignupBox() {
     <aside
       id="digest"
       aria-labelledby="digest-title"
-      className="bg-paper border border-border rounded-[12px] p-6 shadow-[var(--shadow-signup)]"
+      className={`bg-paper border border-border rounded-[12px] shadow-[var(--shadow-signup)] ${compactOnMobile ? 'p-3 max-sm:p-3 sm:p-6' : 'p-6'}`}
     >
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-lg bg-signal-soft text-signal grid place-items-center">
+      <div className={`${compactOnMobile ? 'max-sm:mb-2 sm:mb-4' : 'mb-4'} flex items-center gap-3`}>
+        <div className={`${compactOnMobile ? 'max-sm:hidden' : ''} w-10 h-10 rounded-lg bg-signal-soft text-signal grid place-items-center`}>
           <Mail className="w-5 h-5" />
         </div>
-        <h2 id="digest-title" className="text-[17px] font-semibold text-ink">
+        <h2
+          id="digest-title"
+          className={`font-semibold text-ink ${compactOnMobile ? 'text-[15px] max-sm:text-[14px] sm:text-[17px]' : 'text-[17px]'}`}
+        >
           Get the morning AI digest
         </h2>
       </div>
-      
-      <p className="text-[14px] leading-relaxed text-stone mb-5">
-        The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.
+
+      <p
+        className={`text-stone ${
+          compactOnMobile
+            ? 'text-[13px] max-sm:mb-2 max-sm:line-clamp-1 sm:text-[14px] sm:leading-relaxed sm:mb-5'
+            : 'text-[14px] leading-relaxed mb-5'
+        }`}
+      >
+        {compactOnMobile
+          ? 'AI stories worth knowing — join for the first digest.'
+          : 'The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.'}
       </p>
 
       <form onSubmit={handleSubmit}>
@@ -94,39 +131,79 @@ export function SignupBox() {
         />
 
         <label className="sr-only" htmlFor="email">Work email</label>
-        <div className="flex gap-2 max-sm:flex-col">
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Your work email"
-            autoComplete="email"
-            disabled={isSubmitting}
-            required
-            className="input-field flex-1 min-w-0 max-sm:w-full"
-          />
-          <button
-            type="submit"
-            disabled={isSubmitting || !email}
-            className="btn-primary whitespace-nowrap max-sm:w-full"
-          >
-            {isSubmitting ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Joining...
-              </span>
-            ) : (
-              'Join the list'
-            )}
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className={`flex gap-2 ${compactOnMobile ? 'max-sm:flex-row max-sm:items-center' : 'max-sm:flex-col'}`}>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Your work email"
+              autoComplete="email"
+              disabled={isSubmitting}
+              required
+              className={`input-field flex-1 min-w-0 ${compactOnMobile ? 'max-sm:py-2 max-sm:text-[14px]' : 'max-sm:w-full'}`}
+            />
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`btn-primary whitespace-nowrap ${compactOnMobile ? 'max-sm:py-2 max-sm:px-3 max-sm:text-[14px]' : 'max-sm:w-full'}`}
+            >
+              {isSubmitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className={compactOnMobile ? 'max-sm:hidden' : ''}>Joining...</span>
+                </span>
+              ) : (
+                'Join'
+              )}
+            </button>
+          </div>
+          {compactOnMobile ? (
+            <div className="max-sm:block sm:hidden">
+              {!showRoleOnMobile ? (
+                <button
+                  type="button"
+                  className="text-[12px] font-medium text-signal hover:underline"
+                  onClick={() => setShowRoleOnMobile(true)}
+                >
+                  Add your role (optional)
+                </button>
+              ) : (
+                <ChipSelect
+                  id="signup-role-mobile"
+                  value={role}
+                  prefix="Role"
+                  aria-label="Your role (optional)"
+                  options={[
+                    { value: '', label: 'Optional' },
+                    ...PROFESSIONAL_ROLES.map((r) => ({ value: r, label: r })),
+                  ]}
+                  onChange={(value) => setRole(value as ProfessionalRole | '')}
+                  disabled={isSubmitting}
+                />
+              )}
+            </div>
+          ) : null}
+          <div className={compactOnMobile ? 'hidden sm:block' : ''}>
+            <ChipSelect
+              id="signup-role"
+              value={role}
+              prefix="Role"
+              aria-label="Your role (optional)"
+              options={[
+                { value: '', label: 'Optional' },
+                ...PROFESSIONAL_ROLES.map((r) => ({ value: r, label: r })),
+              ]}
+              onChange={(value) => setRole(value as ProfessionalRole | '')}
+              disabled={isSubmitting}
+            />
+          </div>
         </div>
 
-        {error && (
-          <p className="mt-2 text-[13px] text-red-600">{error}</p>
-        )}
+        {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
 
-        <p className="mt-3 text-[12px] text-meta">
+        <p className={`text-meta ${compactOnMobile ? 'mt-2 max-sm:mt-1 text-[11px] sm:mt-3 sm:text-[12px]' : 'mt-3 text-[12px]'}`}>
           No spam. Unsubscribe anytime.
         </p>
       </form>

@@ -12,10 +12,22 @@ const VALID_TAGS = [
 
 const MAX_SUMMARIES_PER_RUN = 40;
 const SUMMARY_CONCURRENCY = 5;
+const GLOSSARY_MAX_PER_RUN = 5;
+const GLOSSARY_TIMEOUT_MS = 8000;
 
 // Default model: qwen works globally; Google/OpenAI models may return 403 in some regions (e.g. Hong Kong)
 // Override via OPENROUTER_MODEL Vault secret
 const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-vl-32b-instruct";
+
+const PROFESSIONAL_ROLES = [
+  "Marketing",
+  "Sales",
+  "Finance",
+  "HR & People",
+  "Operations",
+  "Founder / Leadership",
+  "Other",
+] as const;
 
 interface Source {
   id: string;
@@ -42,7 +54,136 @@ interface FeedItem {
 interface SummaryResponse {
   summary: string;
   tags: string[];
+  keywords: string[];
+  roles: string[];
+  try_this: string | null;
+  key_points: string[];
   relevant?: boolean;
+}
+
+function extractYouTubeVideoId(url: string): string | null {
+  const match = url.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{11})/
+  );
+  return match?.[1] ?? null;
+}
+
+async function fetchYouTubeVideoContext(
+  videoUrl: string | null | undefined,
+  youtubeApiKey: string | null
+): Promise<string> {
+  if (!videoUrl || !youtubeApiKey) return "";
+  const videoId = extractYouTubeVideoId(videoUrl);
+  if (!videoId) return "";
+
+  try {
+    const apiUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+    apiUrl.searchParams.set("part", "snippet");
+    apiUrl.searchParams.set("id", videoId);
+    apiUrl.searchParams.set("key", youtubeApiKey);
+
+    const response = await fetch(apiUrl.toString());
+    if (!response.ok) return "";
+
+    const data = await response.json();
+    const description = data?.items?.[0]?.snippet?.description;
+    return typeof description === "string" ? description.trim().slice(0, 4000) : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeKeyPoints(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  const points: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim().replace(/^[-•*]\s*/, "");
+    if (!trimmed) continue;
+    points.push(trimmed.slice(0, 280));
+    if (points.length >= 5) break;
+  }
+  return points.slice(0, 5);
+}
+
+const KEYWORD_CANONICAL_LOWER: Record<string, string> = {
+  ai: "AI",
+  api: "API",
+  chatgpt: "ChatGPT",
+  deepseek: "DeepSeek",
+  iphone: "iPhone",
+  llm: "LLM",
+  mcp: "MCP",
+  nvidia: "NVIDIA",
+  openai: "OpenAI",
+  youtube: "YouTube",
+};
+
+function formatKeywordToken(word: string): string {
+  const trimmed = word.trim();
+  if (!trimmed) return "";
+
+  const lower = trimmed.toLowerCase();
+  const canonical = KEYWORD_CANONICAL_LOWER[lower];
+  if (canonical) return canonical;
+
+  if (/^gpt-/i.test(trimmed)) {
+    return `GPT-${trimmed.slice(4)}`;
+  }
+
+  if (/[A-Z]/.test(trimmed) || /\d/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+function toTitleCaseKeyword(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => formatKeywordToken(word))
+    .join(" ");
+}
+
+function normalizeRoles(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const match = PROFESSIONAL_ROLES.find((r) => r.toLowerCase() === entry.trim().toLowerCase());
+    if (!match || seen.has(match)) continue;
+    seen.add(match);
+    result.push(match);
+    if (result.length >= 3) break;
+  }
+
+  return result;
+}
+
+function normalizeKeywords(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const normalized = toTitleCaseKeyword(entry);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+    if (result.length >= 3) break;
+  }
+
+  return result;
 }
 
 const corsHeaders = {
@@ -275,24 +416,117 @@ async function fetchRedditFeed(
   }
 }
 
+async function generateGlossaryDefinition(
+  term: string,
+  apiKey: string,
+  model: string
+): Promise<string | null> {
+  const prompt = `Write one plain-English sentence (max 22 words) defining this AI term for a busy non-technical professional. No jargon.
+
+Term: "${term}"
+
+Respond in JSON only: {"definition": "..."}`;
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ai-news-feed.vercel.app",
+        "X-Title": "AI News Feed",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 120,
+      }),
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return null;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    const parsed = JSON.parse(jsonMatch[0]);
+    return typeof parsed.definition === "string" ? parsed.definition.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
+async function ensureGlossaryTerms(
+  supabase: ReturnType<typeof createClient>,
+  keywords: string[],
+  apiKey: string,
+  model: string,
+  glossaryBudget: { remaining: number }
+): Promise<void> {
+  const unique = [...new Set(keywords.map((k) => k.trim()).filter(Boolean))];
+
+  const tasks = unique.map(async (term) => {
+    if (glossaryBudget.remaining <= 0) return;
+
+    const { data: existing } = await supabase
+      .from("glossary")
+      .select("term")
+      .ilike("term", term)
+      .maybeSingle();
+
+    if (existing) return;
+
+    const definition = await withTimeout(
+      generateGlossaryDefinition(term, apiKey, model),
+      GLOSSARY_TIMEOUT_MS
+    );
+    if (!definition) return;
+
+    glossaryBudget.remaining -= 1;
+    await supabase.from("glossary").upsert(
+      { term, definition, aliases: [] },
+      { onConflict: "term", ignoreDuplicates: true }
+    );
+  });
+
+  await Promise.all(tasks);
+}
+
 async function generateSummary(
   title: string,
   sourceName: string,
   apiKey: string,
-  model: string
+  model: string,
+  extraContext = ""
 ): Promise<SummaryResponse | null> {
+  const contextBlock = extraContext
+    ? `\n\nVideo description or transcript excerpt:\n${extraContext}`
+    : "";
+
   const prompt = `You are a helpful assistant summarizing AI news for non-technical professionals.
 
 For the following content, provide:
 1. A ONE plain-English sentence (max 25 words) explaining "what this means for you" - no jargon, no hype, just practical impact
 2. 1-3 tags from this list: ${VALID_TAGS.join(", ")}
-3. A relevance flag (true if it's actually about AI/tech for general audiences, false for memes/low-effort/irrelevant content)
+3. 2-3 short normalized Title Case keywords for trending topics (e.g. "AI Agents", "MCP", "Gemini", "ChatGPT") — product names and concrete AI topics only, no generic words like "News"
+4. 0-3 professional roles this story is most relevant to, from exactly this list: ${PROFESSIONAL_ROLES.join(", ")}
+5. If this is a how-to or tutorial video, one concrete "try this" action someone can do in about 2 minutes (e.g. "Open ChatGPT and ask it to…"). Otherwise null.
+6. 3-5 short plain-English bullet points (key_points): what the video covers and why it matters for work. Each bullet one sentence, no jargon.
+7. A relevance flag (true if it's actually about AI/tech for general audiences, false for memes/low-effort/irrelevant content)
 
 Content Title: "${title}"
-Source: ${sourceName}
+Source: ${sourceName}${contextBlock}
 
 Respond in JSON only:
-{"summary": "...", "tags": ["...", "..."], "relevant": true/false}`;
+{"summary": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "roles": ["..."], "try_this": "..." or null, "key_points": ["...", "..."], "relevant": true/false}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -307,7 +541,7 @@ Respond in JSON only:
         model,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
-        max_tokens: 200,
+        max_tokens: 700,
       }),
     });
 
@@ -330,9 +564,22 @@ Respond in JSON only:
       VALID_TAGS.includes(t as (typeof VALID_TAGS)[number])
     );
 
+    const keywords = normalizeKeywords(parsed.keywords);
+    const roles = normalizeRoles(parsed.roles);
+    const tryThis =
+      typeof parsed.try_this === "string" && parsed.try_this.trim()
+        ? parsed.try_this.trim()
+        : null;
+
+    const keyPoints = normalizeKeyPoints(parsed.key_points);
+
     return {
       summary: parsed.summary || null,
       tags: validTags.slice(0, 3),
+      keywords,
+      roles,
+      try_this: tryThis,
+      key_points: keyPoints,
       relevant: parsed.relevant !== false,
     };
   } catch (error) {
@@ -402,9 +649,127 @@ Deno.serve(async (req) => {
       );
     }
 
+    let requestBody: { mode?: string } = {};
+    if (req.method === "POST") {
+      const rawBody = await req.text();
+      if (rawBody) {
+        try {
+          requestBody = JSON.parse(rawBody) as { mode?: string };
+        } catch {
+          requestBody = {};
+        }
+      }
+    }
+
     const openRouterKey = await getAppSecret(supabase, "OPENROUTER_API_KEY");
     const openRouterModel =
       (await getAppSecret(supabase, "OPENROUTER_MODEL")) || DEFAULT_OPENROUTER_MODEL;
+
+    const glossaryBudget = { remaining: GLOSSARY_MAX_PER_RUN };
+    const youtubeApiKey = await getAppSecret(supabase, "YOUTUBE_API_KEY");
+
+    if (requestBody.mode === "backfill_keywords") {
+      if (!openRouterKey) {
+        return new Response(
+          JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: needsEnrichment, error: candidatesError } = await supabase
+        .from("feed_items")
+        .select(
+          "id, title, source_name, url, keywords, roles, try_this, key_points, enrich_attempts, enriched_at"
+        )
+        .eq("hidden", false)
+        .not("summary", "is", null)
+        .lt("enrich_attempts", 3)
+        .or("enriched_at.is.null,key_points.is.null")
+        .order("published_at", { ascending: false })
+        .limit(MAX_SUMMARIES_PER_RUN);
+
+      if (candidatesError) throw candidatesError;
+
+      let itemsEnriched = 0;
+      const batch = needsEnrichment || [];
+
+      if (batch.length > 0) {
+        await processSummariesInBatches(
+          batch,
+          async (item) => {
+            const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
+            const result = await generateSummary(
+              item.title,
+              item.source_name,
+              openRouterKey,
+              openRouterModel,
+              context
+            );
+
+            if (!result) {
+              const attempts = (item.enrich_attempts ?? 0) + 1;
+              await supabase
+                .from("feed_items")
+                .update({ enrich_attempts: attempts })
+                .eq("id", item.id);
+              return;
+            }
+
+            const patch: Record<string, unknown> = {};
+            if (!item.enriched_at) {
+              patch.enriched_at = new Date().toISOString();
+            }
+
+            if (!item.keywords?.length && result.keywords.length > 0) {
+              patch.keywords = result.keywords;
+            }
+            if (!item.roles?.length && result.roles.length > 0) {
+              patch.roles = result.roles;
+            }
+            if (
+              (item.try_this === null || item.try_this === undefined) &&
+              result.try_this
+            ) {
+              patch.try_this = result.try_this;
+            }
+            if (!item.key_points || item.key_points.length === 0) {
+              if (result.key_points.length > 0) {
+                patch.key_points = result.key_points;
+              } else {
+                patch.key_points = [];
+                patch.enrich_attempts = (item.enrich_attempts ?? 0) + 1;
+              }
+            }
+
+            if (Object.keys(patch).length > 0) {
+              await supabase.from("feed_items").update(patch).eq("id", item.id);
+            }
+
+            if (result.keywords?.length) {
+              await ensureGlossaryTerms(
+                supabase,
+                result.keywords,
+                openRouterKey,
+                openRouterModel,
+                glossaryBudget
+              );
+            }
+            itemsEnriched++;
+          },
+          SUMMARY_CONCURRENCY
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "backfill_keywords",
+          itemsEnriched,
+          durationMs: Date.now() - startTime,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const redditClientId = await getAppSecret(supabase, "REDDIT_CLIENT_ID");
     const redditClientSecret = await getAppSecret(supabase, "REDDIT_CLIENT_SECRET");
@@ -503,7 +868,7 @@ Deno.serve(async (req) => {
     if (openRouterKey) {
       const { data: unsummarized } = await supabase
         .from("feed_items")
-        .select("id, title, source_name")
+        .select("id, title, source_name, url")
         .is("summary", null)
         .eq("hidden", false)
         .order("created_at", { ascending: false })
@@ -513,11 +878,13 @@ Deno.serve(async (req) => {
         await processSummariesInBatches(
           unsummarized,
           async (item) => {
+            const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
             const result = await generateSummary(
               item.title,
               item.source_name,
               openRouterKey,
-              openRouterModel
+              openRouterModel,
+              context
             );
 
             if (result && result.relevant !== false) {
@@ -526,10 +893,24 @@ Deno.serve(async (req) => {
                 .update({
                   summary: result.summary,
                   tags: result.tags,
+                  keywords: result.keywords,
+                  roles: result.roles,
+                  try_this: result.try_this,
+                  key_points: result.key_points.length > 0 ? result.key_points : null,
                   summary_model: openRouterModel,
                   summarized_at: new Date().toISOString(),
+                  enriched_at: new Date().toISOString(),
                 })
                 .eq("id", item.id);
+              if (result.keywords.length > 0) {
+                await ensureGlossaryTerms(
+                  supabase,
+                  result.keywords,
+                  openRouterKey,
+                  openRouterModel,
+                  glossaryBudget
+                );
+              }
               itemsSummarized++;
             } else if (result && result.relevant === false) {
               // Hide irrelevant content instead of using placeholder summary

@@ -9,6 +9,8 @@ interface FeedListProps {
   error: string | null
   hasMore: boolean
   onLoadMore: () => void
+  onBookmarkChange?: () => void
+  emptyMessage?: string
 }
 
 export function FeedList({
@@ -18,6 +20,8 @@ export function FeedList({
   error,
   hasMore,
   onLoadMore,
+  onBookmarkChange,
+  emptyMessage,
 }: FeedListProps) {
   if (isLoading) {
     return (
@@ -48,7 +52,7 @@ export function FeedList({
         </div>
         <p className="text-[15px] font-medium text-ink mb-1">No stories yet</p>
         <p className="text-[14px] text-meta max-w-xs">
-          New content will appear here once the ingestion runs.
+          {emptyMessage ?? 'New content will appear here once the ingestion runs.'}
         </p>
       </div>
     )
@@ -56,15 +60,16 @@ export function FeedList({
 
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="flex flex-col gap-4">
         {items.map((item) => (
-          <FeedCard key={item.id} item={item} />
+          <FeedCard key={item.id} item={item} onBookmarkChange={onBookmarkChange} />
         ))}
       </div>
 
       {hasMore && (
         <div className="flex justify-center mt-10">
           <button
+            type="button"
             onClick={onLoadMore}
             disabled={isLoadingMore}
             className="btn-secondary"

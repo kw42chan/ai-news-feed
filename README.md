@@ -150,14 +150,25 @@ Before running the cron migration, add these secrets to Vault:
 -- In Supabase SQL Editor
 SELECT vault.create_secret('https://gmfzwuunaqzutbhudsxn.supabase.co', 'SUPABASE_URL');
 SELECT vault.create_secret('your-anon-key', 'SUPABASE_ANON_KEY');
+SELECT vault.create_secret('sb_publishable_...', 'SUPABASE_PUBLISHABLE_KEY');
 SELECT vault.create_secret('your-openrouter-api-key', 'OPENROUTER_API_KEY');
 ```
 
-### 4. Deploy Edge Function
+### 4. Deploy Edge Functions
 
 ```bash
 supabase functions deploy ingest --verify-jwt
 ```
+
+**`keyword-videos` (YouTube discovery for trending chips):** JWT verification must be **off** at the gateway (publishable keys are not JWTs). The function validates the `apikey` header against **`SUPABASE_PUBLISHABLE_KEY`** (same value as `VITE_SUPABASE_PUBLISHABLE_KEY` on Vercel) **or** legacy **`SUPABASE_ANON_KEY`** (function env or Vault). Deploy with:
+
+```bash
+supabase functions deploy keyword-videos --no-verify-jwt
+```
+
+(`supabase/config.toml` sets `[functions.keyword-videos] verify_jwt = false` for local CLI deploys.)
+
+Apply migration `20261003000012_keyword_video_daily_quota.sql` before deploying `keyword-videos` (daily uncached search cap).
 
 ### 5. Test Ingestion
 

@@ -1,5 +1,17 @@
 {
   "rewrites": [
+    {
+      "source": "/story/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(bot|Bot|BOT|facebookexternalhit|WhatsApp|Slack|Discord|Telegram|LinkedIn|Twitter).*"
+        }
+      ],
+      "destination": "/api/og-story?id=:id"
+    },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }
