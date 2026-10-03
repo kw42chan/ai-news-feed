@@ -31,6 +31,8 @@ export interface FeedItem {
   summarized_at: string | null
   tags: string[]
   keywords: string[]
+  roles: string[]
+  try_this: string | null
   hidden: boolean
   created_at: string
   updated_at: string
@@ -39,20 +41,23 @@ export interface FeedItem {
 export type SortOption = 'latest' | 'popular'
 export type FilterOption = 'all' | 'videos' | 'discussions'
 
-export interface FeedFilters {
-  filter: FilterOption
-  sort: SortOption
-  tags: string[]
-}
-
 export interface FetchFeedOptions {
   sourceIds?: string[]
   tags?: string[]
   keyword?: string
+  role?: string
+  rolePrioritize?: string
+  savedIds?: string[]
   source?: SourceKind | SourceKind[]
   sort?: SortOption
   cursor?: string
   limit?: number
+}
+
+export interface FeedResponse {
+  items: FeedItem[]
+  nextCursor: string | null
+  hasMore: boolean
 }
 
 export interface TrendingKeyword {
@@ -60,8 +65,18 @@ export interface TrendingKeyword {
   count: number
 }
 
-export interface FeedResponse {
-  items: FeedItem[]
-  nextCursor: string | null
-  hasMore: boolean
+export interface WeeklyRecapItem {
+  headline: string
+  explanation: string
+  why_it_matters: string
+  feed_item_ids: string[]
+}
+
+export interface WeeklyRecap {
+  id: string
+  week_start: string
+  title: string
+  intro: string
+  items: WeeklyRecapItem[]
+  created_at: string
 }

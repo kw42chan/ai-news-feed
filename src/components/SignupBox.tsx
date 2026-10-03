@@ -1,11 +1,18 @@
 import { useState } from 'react'
 import { Mail, Loader2, CheckCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import {
+  getSignupRolePreference,
+  PROFESSIONAL_ROLES,
+  setSignupRolePreference,
+  type ProfessionalRole,
+} from '../lib/roles'
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
 export function SignupBox() {
   const [email, setEmail] = useState('')
+  const [role, setRole] = useState<ProfessionalRole | ''>(() => getSignupRolePreference() ?? '')
   const [honeypot, setHoneypot] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
@@ -30,14 +37,18 @@ export function SignupBox() {
     setIsSubmitting(true)
 
     try {
-      const { error: insertError } = await supabase
-        .from('subscribers')
-        .insert({ email: email.toLowerCase().trim() })
+      const payload: { email: string; role?: string } = {
+        email: email.toLowerCase().trim(),
+      }
+      if (role) payload.role = role
+
+      const { error: insertError } = await supabase.from('subscribers').insert(payload)
 
       if (insertError && insertError.code !== '23505') {
         throw insertError
       }
 
+      setSignupRolePreference(role || null)
       setIsSuccess(true)
     } catch {
       setError('Something went wrong. Please try again.')
@@ -55,7 +66,7 @@ export function SignupBox() {
         <div className="flex items-start gap-3 text-signal">
           <CheckCircle className="w-5 h-5 mt-0.5 shrink-0" />
           <p className="text-[15px] leading-relaxed text-ink">
-            You're on the list. We'll email you when the first digest goes out.
+            You&apos;re on the list. We&apos;ll email you when the first digest goes out.
           </p>
         </div>
       </aside>
@@ -76,7 +87,7 @@ export function SignupBox() {
           Get the morning AI digest
         </h2>
       </div>
-      
+
       <p className="text-[14px] leading-relaxed text-stone mb-5">
         The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.
       </p>
@@ -94,41 +105,52 @@ export function SignupBox() {
         />
 
         <label className="sr-only" htmlFor="email">Work email</label>
-        <div className="flex gap-2 max-sm:flex-col">
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Your work email"
-            autoComplete="email"
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2 max-sm:flex-col">
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Your work email"
+              autoComplete="email"
+              disabled={isSubmitting}
+              required
+              className="input-field flex-1 min-w-0 max-sm:w-full"
+            />
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="btn-primary whitespace-nowrap max-sm:w-full"
+            >
+              {isSubmitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Joining...
+                </span>
+              ) : (
+                'Join the list'
+              )}
+            </button>
+          </div>
+          <label className="sr-only" htmlFor="signup-role">Your role (optional)</label>
+          <select
+            id="signup-role"
+            value={role}
+            onChange={(e) => setRole(e.target.value as ProfessionalRole | '')}
             disabled={isSubmitting}
-            required
-            className="input-field flex-1 min-w-0 max-sm:w-full"
-          />
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="btn-primary whitespace-nowrap max-sm:w-full"
+            className="input-field text-[14px] text-stone"
           >
-            {isSubmitting ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Joining...
-              </span>
-            ) : (
-              'Join the list'
-            )}
-          </button>
+            <option value="">Your role (optional)</option>
+            {PROFESSIONAL_ROLES.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
         </div>
 
-        {error && (
-          <p className="mt-2 text-[13px] text-red-600">{error}</p>
-        )}
+        {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
 
-        <p className="mt-3 text-[12px] text-meta">
-          No spam. Unsubscribe anytime.
-        </p>
+        <p className="mt-3 text-[12px] text-meta">No spam. Unsubscribe anytime.</p>
       </form>
     </aside>
   )

@@ -1,24 +1,50 @@
 import { supabase } from './supabase'
-import type { FeedItem, FetchFeedOptions, FeedResponse, Source, TrendingKeyword } from '../types'
+import type {
+  FeedItem,
+  FetchFeedOptions,
+  FeedResponse,
+  Source,
+  TrendingKeyword,
+  WeeklyRecap,
+} from '../types'
 
 const DEFAULT_PAGE_SIZE = 20
+
+function prioritizeByRole(items: FeedItem[], role: string): FeedItem[] {
+  return [...items].sort((a, b) => {
+    const aMatch = a.roles?.includes(role) ? 1 : 0
+    const bMatch = b.roles?.includes(role) ? 1 : 0
+    return bMatch - aMatch
+  })
+}
 
 export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedResponse> {
   const {
     sourceIds,
     tags,
     keyword,
+    role,
+    rolePrioritize,
+    savedIds,
     source,
     sort = 'latest',
     cursor,
     limit = DEFAULT_PAGE_SIZE,
   } = options
 
+  if (savedIds && savedIds.length === 0) {
+    return { items: [], nextCursor: null, hasMore: false }
+  }
+
   let query = supabase
     .from('feed_items')
     .select('*')
     .eq('hidden', false)
     .not('summary', 'is', null)
+
+  if (savedIds && savedIds.length > 0) {
+    query = query.in('id', savedIds)
+  }
 
   if (sourceIds && sourceIds.length > 0) {
     query = query.in('source_id', sourceIds)
@@ -35,6 +61,10 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
 
   if (keyword) {
     query = query.contains('keywords', [keyword])
+  }
+
+  if (role) {
+    query = query.contains('roles', [role])
   }
 
   if (sort === 'latest') {
@@ -58,8 +88,16 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
     throw new Error(`Failed to fetch feed: ${error.message}`)
   }
 
-  const allItems = (data || []) as FeedItem[]
-  const youtubeItems = allItems.filter(item => item.source === 'youtube')
+  let youtubeItems = ((data || []) as FeedItem[]).filter(item => item.source === 'youtube')
+
+  if (rolePrioritize && !role) {
+    youtubeItems = prioritizeByRole(youtubeItems, rolePrioritize)
+  }
+
+  if (savedIds && savedIds.length > 0) {
+    const order = new Map(savedIds.map((id, i) => [id, i]))
+    youtubeItems.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+  }
 
   const hasMore = youtubeItems.length > limit
   const returnItems = hasMore ? youtubeItems.slice(0, limit) : youtubeItems
@@ -72,6 +110,32 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
     nextCursor,
     hasMore,
   }
+}
+
+export async function fetchFeedItemById(id: string): Promise<FeedItem | null> {
+  const { data, error } = await supabase
+    .from('feed_items')
+    .select('*')
+    .eq('id', id)
+    .eq('hidden', false)
+    .not('summary', 'is', null)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to fetch story: ${error.message}`)
+  if (!data || data.source !== 'youtube') return null
+  return data as FeedItem
+}
+
+export async function fetchLatestWeeklyRecap(): Promise<WeeklyRecap | null> {
+  const { data, error } = await supabase
+    .from('weekly_recaps')
+    .select('*')
+    .order('week_start', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to fetch weekly recap: ${error.message}`)
+  return data as WeeklyRecap | null
 }
 
 export async function fetchTrendingKeywords(

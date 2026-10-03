@@ -1,5 +1,6 @@
 import { FeedCard } from './FeedCard'
 import type { FeedItem } from '../types'
+import type { GlossaryEntry } from '../lib/glossary'
 import { Loader2, AlertCircle, Inbox } from 'lucide-react'
 
 interface FeedListProps {
@@ -9,6 +10,10 @@ interface FeedListProps {
   error: string | null
   hasMore: boolean
   onLoadMore: () => void
+  glossary?: Map<string, GlossaryEntry>
+  onBookmarkChange?: () => void
+  bookmarkTick?: number
+  emptyMessage?: string
 }
 
 export function FeedList({
@@ -18,6 +23,9 @@ export function FeedList({
   error,
   hasMore,
   onLoadMore,
+  glossary = new Map(),
+  onBookmarkChange,
+  emptyMessage,
 }: FeedListProps) {
   if (isLoading) {
     return (
@@ -48,7 +56,7 @@ export function FeedList({
         </div>
         <p className="text-[15px] font-medium text-ink mb-1">No stories yet</p>
         <p className="text-[14px] text-meta max-w-xs">
-          New content will appear here once the ingestion runs.
+          {emptyMessage ?? 'New content will appear here once the ingestion runs.'}
         </p>
       </div>
     )
@@ -58,13 +66,19 @@ export function FeedList({
     <div>
       <div className="flex flex-col gap-4">
         {items.map((item) => (
-          <FeedCard key={item.id} item={item} />
+          <FeedCard
+            key={item.id}
+            item={item}
+            glossary={glossary}
+            onBookmarkChange={onBookmarkChange}
+          />
         ))}
       </div>
 
       {hasMore && (
         <div className="flex justify-center mt-10">
           <button
+            type="button"
             onClick={onLoadMore}
             disabled={isLoadingMore}
             className="btn-secondary"
