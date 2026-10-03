@@ -117,7 +117,7 @@ function App() {
             </section>
 
             <aside
-              className="mb-8 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[4.5rem] lg:self-start"
+              className="mb-8 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[4.5rem] lg:self-start lg:pt-16"
               aria-label="Morning digest signup"
             >
               <SignupBox />
