@@ -1,5 +1,4 @@
 import type { FeedItem } from '../types'
-import { CirclePlay, MessageCircle, ExternalLink, Lightbulb } from 'lucide-react'
 
 interface FeedCardProps {
   item: FeedItem
@@ -13,113 +12,82 @@ function formatRelativeTime(dateString: string): string {
   const diffHours = Math.floor(diffMs / 3600000)
   const diffDays = Math.floor(diffMs / 86400000)
 
-  if (diffMins < 1) return 'Just now'
+  if (diffMins < 1) return 'just now'
   if (diffMins < 60) return `${diffMins}m ago`
   if (diffHours < 24) return `${diffHours}h ago`
   if (diffDays < 7) return `${diffDays}d ago`
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function formatEngagement(score: number): string {
-  if (score >= 1000000) return `${(score / 1000000).toFixed(1)}M`
-  if (score >= 1000) return `${(score / 1000).toFixed(1)}K`
-  return score.toString()
+function formatViews(score: number): string {
+  if (score >= 1000000) return `${(score / 1000000).toFixed(1)}M views`
+  if (score >= 1000) return `${(score / 1000).toFixed(1)}K views`
+  return `${score} views`
 }
 
-function SourceBadge({ source }: { source: 'youtube' | 'reddit' | 'x' }) {
-  const config = {
-    youtube: {
-      icon: <CirclePlay className="w-3.5 h-3.5" />,
-      label: 'YouTube',
-      className: 'bg-[--color-youtube]/10 text-[--color-youtube]',
-    },
-    reddit: {
-      icon: <MessageCircle className="w-3.5 h-3.5" />,
-      label: 'Reddit',
-      className: 'bg-[--color-reddit]/10 text-[--color-reddit]',
-    },
-    x: {
-      icon: <span className="text-xs font-bold">𝕏</span>,
-      label: 'X',
-      className: 'bg-white/10 text-white',
-    },
-  }
-
-  const { icon, label, className } = config[source]
-
+function YouTubeIcon({ className }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${className}`}>
-      {icon}
-      {label}
-    </span>
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path fill="currentColor" d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8z"/>
+      <path fill="#fff" d="m9.6 15.6 6.3-3.6-6.3-3.6z"/>
+    </svg>
   )
 }
 
 export function FeedCard({ item }: FeedCardProps) {
   return (
-    <article className="group bg-[--color-bg-card] rounded-2xl border border-[--color-border] overflow-hidden hover:border-[--color-accent]/50 hover:bg-[--color-bg-card-hover] transition-all">
+    <article className="card overflow-hidden">
       <a
         href={item.url}
         target="_blank"
         rel="noopener noreferrer"
         className="block"
       >
-        {item.thumbnail && (
-          <div className="relative aspect-video overflow-hidden">
+        {/* Thumbnail */}
+        <div className="relative aspect-video overflow-hidden bg-mist">
+          {item.thumbnail && (
             <img
               src={item.thumbnail}
               alt=""
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
+              className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[--color-bg-card] to-transparent opacity-60" />
-          </div>
-        )}
+          )}
+        </div>
 
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <SourceBadge source={item.source} />
-              <span className="text-xs text-[--color-text-muted]">
-                {item.source_name}
-              </span>
-            </div>
-            <span className="text-xs text-[--color-text-muted]">
-              {formatRelativeTime(item.published_at)}
-            </span>
+        <div className="p-4">
+          {/* Meta row: channel, time - using comma, not middle dot */}
+          <div className="flex items-center gap-1.5 text-[13px] text-meta mb-2">
+            <YouTubeIcon className="w-4 h-4 text-[#FF0000] shrink-0" />
+            <span className="font-medium text-stone">{item.source_name}</span>
+            <span>,</span>
+            <span>{formatRelativeTime(item.published_at)}</span>
           </div>
 
-          <h3 className="text-[--color-text-primary] font-medium leading-snug line-clamp-2 group-hover:text-[--color-accent] transition-colors">
+          {/* Title - secondary to summary */}
+          <h3 className="text-[15px] font-semibold leading-snug text-ink line-clamp-2 mb-3">
             {item.title}
-            <ExternalLink className="inline-block w-3.5 h-3.5 ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity" />
           </h3>
 
+          {/* Summary box - THE HERO, THE ONE BOLD ELEMENT */}
           {item.summary && (
-            <div className="flex gap-2 p-3 bg-[--color-accent]/5 rounded-xl border border-[--color-accent]/20">
-              <Lightbulb className="w-4 h-4 text-[--color-accent] shrink-0 mt-0.5" />
-              <p className="text-sm text-[--color-text-secondary] leading-relaxed">
-                <span className="text-[--color-accent] font-medium">What this means for you: </span>
+            <div className="summary-box mb-3">
+              <p className="text-[15px] leading-relaxed text-stone line-clamp-4">
                 {item.summary}
               </p>
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-1">
+          {/* Footer: tags, views - comma separated */}
+          <div className="flex items-center justify-between gap-2 text-[12px] text-meta">
             {item.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {item.tags.slice(0, 3).map((tag) => (
-                  <span
-                    key={tag}
-                    className="px-2 py-0.5 bg-[--color-bg-secondary] rounded-full text-xs text-[--color-text-muted]"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              <span className="truncate">
+                {item.tags.slice(0, 2).join(', ')}
+              </span>
             )}
             {item.engagement_score > 0 && (
-              <span className="text-xs text-[--color-text-muted]">
-                {formatEngagement(item.engagement_score)} {item.source === 'youtube' ? 'views' : 'engagement'}
+              <span className="shrink-0 tabular-nums">
+                {formatViews(item.engagement_score)}
               </span>
             )}
           </div>

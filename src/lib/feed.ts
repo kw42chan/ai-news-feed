@@ -54,9 +54,12 @@ export async function fetchFeed(options: FetchFeedOptions = {}): Promise<FeedRes
     throw new Error(`Failed to fetch feed: ${error.message}`)
   }
 
-  const items = (data || []) as FeedItem[]
-  const hasMore = items.length > limit
-  const returnItems = hasMore ? items.slice(0, limit) : items
+  // Defensive client-side filter: only show YouTube items
+  const allItems = (data || []) as FeedItem[]
+  const youtubeItems = allItems.filter(item => item.source === 'youtube')
+
+  const hasMore = youtubeItems.length > limit
+  const returnItems = hasMore ? youtubeItems.slice(0, limit) : youtubeItems
   const nextCursor = hasMore && returnItems.length > 0
     ? returnItems[returnItems.length - 1].published_at
     : null

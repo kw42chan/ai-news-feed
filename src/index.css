@@ -1,47 +1,245 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-primary: #0a0a0f;
-  --color-bg-secondary: #12121a;
-  --color-bg-card: #1a1a25;
-  --color-bg-card-hover: #22222f;
-  --color-border: #2a2a3a;
-  --color-text-primary: #f5f5f7;
-  --color-text-secondary: #a0a0b0;
-  --color-text-muted: #6b6b7a;
-  --color-accent: #a855f7;
-  --color-accent-hover: #9333ea;
-  --color-youtube: #ff0000;
-  --color-reddit: #ff4500;
-  --font-family-sans: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* === COLOR PALETTE === */
+  /* 5 named colors - deliberate, not defaults */
+  --color-ink: #1A1A2E;       /* Headlines, strong text */
+  --color-stone: #4A5568;     /* Body, secondary */
+  --color-mist: #F7F8FA;      /* Page background */
+  --color-paper: #FFFFFF;     /* Cards, surfaces */
+  --color-signal: #0066CC;    /* THE ONE ACCENT - summary borders, links only */
+  
+  /* Derived colors */
+  --color-signal-soft: #EBF4FF;  /* Summary box background */
+  --color-border: #E2E8F0;       /* Subtle borders */
+  --color-meta: #64748B;         /* Timestamps, view counts */
+
+  /* === TYPOGRAPHY === */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Karla", system-ui, sans-serif;
+
+  /* === RADIUS - VARIED BY HIERARCHY === */
+  --radius-card: 8px;
+  --radius-chip: 4px;
+  --radius-button: 6px;
+  --radius-signup: 12px;
+
+  /* === SHADOWS === */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-signup: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Base styles */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 html {
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
+  -webkit-text-size-adjust: 100%;
+  background-color: var(--color-mist);
+  color: var(--color-stone);
 }
 
 body {
-  font-family: var(--font-family-sans);
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
+/* Display type - Fraunces */
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
 }
 
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+img {
+  display: block;
+  max-width: 100%;
 }
 
-*::-webkit-scrollbar-track {
-  background: transparent;
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-*::-webkit-scrollbar-thumb {
-  background-color: var(--color-border);
+button, input {
+  font: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Focus states - visible, accessible */
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+}
+
+/* === COMPONENT STYLES === */
+
+/* Cards - subtle at rest, hint of shadow on hover */
+.card {
+  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  transition: box-shadow 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Summary box - THE ONE BOLD ELEMENT */
+.summary-box {
+  border-left: 3px solid var(--color-signal);
+  background: var(--color-signal-soft);
+  padding: 12px 14px;
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+}
+
+/* Chips - subtle rounded */
+.chip {
+  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-chip);
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-stone);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip:hover {
+  border-color: var(--color-signal);
+  color: var(--color-signal);
+}
+
+.chip-active {
+  background: var(--color-signal-soft);
+  border-color: var(--color-signal);
+  color: var(--color-signal);
+}
+
+/* Segmented control */
+.seg-control {
+  display: inline-flex;
+  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  padding: 3px;
+  gap: 2px;
+}
+
+.seg-btn {
+  padding: 6px 14px;
+  border: none;
   border-radius: 4px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-stone);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.seg-btn:hover {
+  color: var(--color-ink);
+}
+
+.seg-btn-active {
+  background: var(--color-mist);
+  color: var(--color-ink);
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--color-signal);
+  color: white;
+  border: none;
+  border-radius: var(--radius-button);
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-primary:hover {
+  background: #0052A3;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-secondary:hover {
+  border-color: var(--color-signal);
+  color: var(--color-signal);
+}
+
+/* Input fields */
+.input-field {
+  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  padding: 10px 14px;
+  font-size: 15px;
+  color: var(--color-ink);
+  transition: border-color 0.15s ease;
+}
+
+.input-field::placeholder {
+  color: var(--color-meta);
+}
+
+.input-field:hover {
+  border-color: #94A3B8;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--color-signal);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15);
+}
+
+/* Link style */
+.link {
+  color: var(--color-signal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  text-decoration: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+  }
 }

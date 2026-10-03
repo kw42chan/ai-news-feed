@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Header } from './components/Header'
+import { SignupBox } from './components/SignupBox'
 import { FilterBar } from './components/FilterBar'
 import { FeedList } from './components/FeedList'
-import { LastUpdated } from './components/LastUpdated'
+import { Footer } from './components/Footer'
 import { fetchFeed, getLastUpdated } from './lib/feed'
-import type { FeedItem, FilterOption, SortOption, SourceKind } from './types'
+import type { FeedItem, SortOption } from './types'
 
 const AVAILABLE_TAGS = [
   'tools',
@@ -16,6 +17,22 @@ const AVAILABLE_TAGS = [
   'creative',
 ]
 
+function formatLastUpdated(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+
+  if (diffMins < 1) return 'Updated just now'
+  if (diffMins < 60) return `Updated ${diffMins} minute${diffMins === 1 ? '' : 's'} ago`
+  
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `Updated ${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
+  
+  const diffDays = Math.floor(diffHours / 24)
+  return `Updated ${diffDays} day${diffDays === 1 ? '' : 's'} ago`
+}
+
 function App() {
   const [items, setItems] = useState<FeedItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -25,20 +42,8 @@ function App() {
   const [cursor, setCursor] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
-  const [filter, setFilter] = useState<FilterOption>('all')
   const [sort, setSort] = useState<SortOption>('latest')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-
-  const getSourceFromFilter = useCallback((): SourceKind[] | undefined => {
-    switch (filter) {
-      case 'videos':
-        return ['youtube']
-      case 'discussions':
-        return ['reddit']
-      default:
-        return undefined
-    }
-  }, [filter])
 
   const loadFeed = useCallback(async (reset = true) => {
     if (reset) {
@@ -51,9 +56,7 @@ function App() {
     }
 
     try {
-      const source = getSourceFromFilter()
       const response = await fetchFeed({
-        source,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
         sort,
         cursor: reset ? undefined : cursor ?? undefined,
@@ -77,15 +80,11 @@ function App() {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }, [filter, sort, selectedTags, cursor, getSourceFromFilter])
+  }, [sort, selectedTags, cursor])
 
   useEffect(() => {
     loadFeed(true)
-  }, [filter, sort, selectedTags])
-
-  const handleFilterChange = (newFilter: FilterOption) => {
-    setFilter(newFilter)
-  }
+  }, [sort, selectedTags])
 
   const handleSortChange = (newSort: SortOption) => {
     setSort(newSort)
@@ -104,49 +103,58 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[--color-bg-primary]">
+    <div className="min-h-screen bg-mist">
       <Header />
       
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-[--color-text-primary] mb-2">
-            Your AI News Feed
-          </h2>
-          <p className="text-[--color-text-secondary] mb-4">
-            All the AI news you care about from YouTube and Reddit, explained simply.
-          </p>
-          <LastUpdated timestamp={lastUpdated} />
-        </div>
+      <main id="top">
+        {/* Hero section - no gradient, no eyebrow pill */}
+        <section className="py-16 max-sm:py-10">
+          <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
+            <div className="grid grid-cols-[1fr_380px] gap-12 items-start max-lg:grid-cols-1 max-lg:gap-8">
+              <div>
+                {/* Headline - uniform color, no accent on specific phrase */}
+                <h1 className="font-display text-[42px] max-sm:text-[32px] font-semibold leading-[1.1] tracking-tight text-ink mb-4">
+                  AI news for busy professionals, in plain English
+                </h1>
+                <p className="text-[17px] leading-relaxed text-stone mb-4 max-w-[540px]">
+                  The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
+                </p>
+                {lastUpdated && (
+                  <p className="text-[14px] text-meta">
+                    {formatLastUpdated(lastUpdated)}
+                  </p>
+                )}
+              </div>
 
-        <div className="mb-6">
-          <FilterBar
-            filter={filter}
-            sort={sort}
-            selectedTags={selectedTags}
-            availableTags={AVAILABLE_TAGS}
-            onFilterChange={handleFilterChange}
-            onSortChange={handleSortChange}
-            onTagToggle={handleTagToggle}
-          />
-        </div>
+              <SignupBox />
+            </div>
+          </div>
+        </section>
 
-        <FeedList
-          items={items}
-          isLoading={isLoading}
-          isLoadingMore={isLoadingMore}
-          error={error}
-          hasMore={hasMore}
-          onLoadMore={handleLoadMore}
-        />
+        {/* Feed section */}
+        <section id="feed" aria-labelledby="feed-title" className="pb-20 max-sm:pb-12">
+          <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
+            <FilterBar
+              sort={sort}
+              selectedTags={selectedTags}
+              availableTags={AVAILABLE_TAGS}
+              onSortChange={handleSortChange}
+              onTagToggle={handleTagToggle}
+            />
+
+            <FeedList
+              items={items}
+              isLoading={isLoading}
+              isLoadingMore={isLoadingMore}
+              error={error}
+              hasMore={hasMore}
+              onLoadMore={handleLoadMore}
+            />
+          </div>
+        </section>
       </main>
 
-      <footer className="border-t border-[--color-border] mt-16">
-        <div className="max-w-5xl mx-auto px-4 py-8 text-center text-sm text-[--color-text-muted]">
-          <p>
-            AI News, Minus the Noise. Built for non-technical professionals who want to keep up with AI.
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }
