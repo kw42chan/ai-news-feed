@@ -137,6 +137,29 @@ button, input {
   color: #ffffff;
 }
 
+.chip-row {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+.chip-row .chip {
+  flex-shrink: 0;
+}
+
+@media (max-width: 639px) {
+  .chip-row .chip {
+    scroll-snap-align: start;
+  }
+
+  .chip-row {
+    scroll-snap-type: x proximity;
+  }
+}
+
 /* Segmented control */
 .seg-control {
   display: inline-flex;

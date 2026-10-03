@@ -100,56 +100,53 @@ function App() {
       <Header />
       
       <main id="top">
-        <section className="py-16 max-sm:py-10 max-lg:pb-8">
-          <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
-            <h1 className="font-display text-[42px] max-sm:text-[32px] font-semibold leading-[1.1] tracking-tight text-ink mb-4 max-w-[640px]">
-              AI news for busy professionals, in plain English
-            </h1>
-            <p className="text-[17px] leading-relaxed text-stone mb-4 max-w-[540px]">
-              The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
-            </p>
-            {lastUpdated && (
-              <p className="text-[14px] text-meta mb-8 lg:mb-0">
-                {formatLastUpdated(lastUpdated)}
+        <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
+          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-x-10 lg:items-start">
+            <section className="py-16 max-sm:py-10 lg:col-start-1 lg:row-start-1 lg:pb-8">
+              <h1 className="font-display text-[42px] max-sm:text-[32px] font-semibold leading-[1.1] tracking-tight text-ink mb-4 max-w-[640px]">
+                AI news for busy professionals, in plain English
+              </h1>
+              <p className="text-[17px] leading-relaxed text-stone mb-4 max-w-[540px]">
+                The AI stories that matter for your work, each summed up in one simple line. Updated twice a day.
               </p>
-            )}
-            <div className="mt-8 lg:hidden">
+              {lastUpdated && (
+                <p className="text-[14px] text-meta">
+                  {formatLastUpdated(lastUpdated)}
+                </p>
+              )}
+            </section>
+
+            <aside
+              className="mb-8 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[4.5rem] lg:self-start"
+              aria-label="Morning digest signup"
+            >
               <SignupBox />
-            </div>
+            </aside>
+
+            <section
+              id="feed"
+              aria-labelledby="feed-title"
+              className="pb-20 max-sm:pb-12 lg:col-start-1 lg:row-start-2 min-w-0"
+            >
+              <FilterBar
+                sort={sort}
+                selectedKeyword={selectedKeyword}
+                trendingKeywords={trendingKeywords}
+                onSortChange={handleSortChange}
+                onKeywordSelect={handleKeywordSelect}
+              />
+
+              <FeedList
+                items={items}
+                isLoading={isLoading}
+                isLoadingMore={isLoadingMore}
+                error={error}
+                hasMore={hasMore}
+                onLoadMore={handleLoadMore}
+              />
+            </section>
           </div>
-        </section>
-
-        <section id="feed" aria-labelledby="feed-title" className="pb-20 max-sm:pb-12">
-          <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
-            <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10 lg:items-start">
-              <div className="min-w-0">
-                <FilterBar
-                  sort={sort}
-                  selectedKeyword={selectedKeyword}
-                  trendingKeywords={trendingKeywords}
-                  onSortChange={handleSortChange}
-                  onKeywordSelect={handleKeywordSelect}
-                />
-
-                <FeedList
-                  items={items}
-                  isLoading={isLoading}
-                  isLoadingMore={isLoadingMore}
-                  error={error}
-                  hasMore={hasMore}
-                  onLoadMore={handleLoadMore}
-                />
-              </div>
-
-              <aside
-                className="hidden lg:block sticky top-[4.5rem] self-start"
-                aria-label="Morning digest signup"
-              >
-                <SignupBox />
-              </aside>
-            </div>
-          </div>
-        </section>
+        </div>
       </main>
 
       <Footer />

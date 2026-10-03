@@ -46,7 +46,11 @@ export function FilterBar({
       </div>
 
       {showKeywords && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by keyword">
+        <div
+          className="chip-row flex gap-2 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:pb-1 sm:flex-wrap"
+          role="group"
+          aria-label="Filter by keyword"
+        >
           <button
             type="button"
             onClick={() => onKeywordSelect(null)}
