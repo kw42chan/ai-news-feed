@@ -29,8 +29,9 @@ export function useDigestInView(): boolean {
         return
       }
 
+      setInView(false)
+
       if (attempt >= MAX_ATTACH_ATTEMPTS) {
-        setInView(false)
         return
       }
 
