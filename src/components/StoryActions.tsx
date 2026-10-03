@@ -10,6 +10,8 @@ interface StoryActionsProps {
   compact?: boolean
   className?: string
   onBookmarkChange?: () => void
+  /** When set, share-fallback UI is rendered by the parent (e.g. below card meta). */
+  onShareFallbackUrl?: (url: string | null) => void
 }
 
 export function StoryActions({
@@ -19,10 +21,11 @@ export function StoryActions({
   compact = false,
   className = '',
   onBookmarkChange,
+  onShareFallbackUrl,
 }: StoryActionsProps) {
   const [saved, setSaved] = useState(() => isStorySaved(id))
   const [shareHint, setShareHint] = useState<string | null>(null)
-  const [shareFailedUrl, setShareFailedUrl] = useState<string | null>(null)
+  const [localFallbackUrl, setLocalFallbackUrl] = useState<string | null>(null)
 
   const iconClass = compact ? 'w-3.5 h-3.5' : 'w-4 h-4'
   const btnClass = compact
@@ -35,7 +38,8 @@ export function StoryActions({
   }
 
   const handleShare = async () => {
-    setShareFailedUrl(null)
+    onShareFallbackUrl?.(null)
+    setLocalFallbackUrl(null)
     const result = await shareStory(id, title, summary)
     if (result === 'copied') {
       setShareHint('Link copied')
@@ -44,7 +48,9 @@ export function StoryActions({
       setShareHint('Shared')
       setTimeout(() => setShareHint(null), 2000)
     } else {
-      setShareFailedUrl(getStoryShareUrl(id))
+      const url = getStoryShareUrl(id)
+      if (onShareFallbackUrl) onShareFallbackUrl(url)
+      else setLocalFallbackUrl(url)
     }
   }
 
@@ -71,18 +77,22 @@ export function StoryActions({
           <Share2 className={iconClass} />
         </button>
       </div>
-      {shareFailedUrl && (
-        <div className="mt-2 text-[12px] text-stone max-w-xs" role="status">
-          <p className="mb-1">Copy this link:</p>
-          <input
-            type="text"
-            readOnly
-            value={shareFailedUrl}
-            className="input-field w-full text-[12px] py-1.5"
-            onFocus={(e) => e.target.select()}
-          />
-        </div>
-      )}
+      {!onShareFallbackUrl && localFallbackUrl && <ShareFallbackBox url={localFallbackUrl} />}
+    </div>
+  )
+}
+
+export function ShareFallbackBox({ url }: { url: string }) {
+  return (
+    <div className="mt-2 text-[12px] text-stone max-w-xs" role="status">
+      <p className="mb-1">Copy this link:</p>
+      <input
+        type="text"
+        readOnly
+        value={url}
+        className="input-field w-full text-[12px] py-1.5"
+        onFocus={(e) => e.target.select()}
+      />
     </div>
   )
 }

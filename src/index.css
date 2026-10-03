@@ -320,10 +320,40 @@ button, input {
   border-color: var(--color-signal);
 }
 
-.chip-has-glossary {
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
+.glossary-hint {
+  padding-left: 2px;
+  border-left: 2px solid var(--color-border);
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.text-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.text-select-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.text-select-face {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.text-select-wrap:hover .text-select-face {
+  color: var(--color-signal);
 }
 
 .glossary-term-trigger {

@@ -111,15 +111,27 @@ export function StoryPage({ id }: StoryPageProps) {
           <h2 id="related-stories" className="font-display text-[22px] font-semibold text-ink mb-4">
             Related stories
           </h2>
-          <ul className="space-y-3 list-none p-0 m-0">
+          <ul className="space-y-4 list-none p-0 m-0">
             {related.map((story) => (
               <li key={story.id}>
                 <button
                   type="button"
                   onClick={() => navigateTo(`/story/${story.id}`)}
-                  className="text-left text-[15px] text-signal hover:underline leading-snug"
+                  className="flex gap-3 w-full text-left group/related"
                 >
-                  {story.summary ?? story.title}
+                  {story.thumbnail && (
+                    <img
+                      src={story.thumbnail}
+                      alt=""
+                      className="w-20 h-[45px] rounded-md object-cover shrink-0 bg-mist"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-[12px] text-meta mb-0.5">{story.source_name}</p>
+                    <p className="text-[15px] leading-snug text-ink group-hover/related:text-signal transition-colors line-clamp-2">
+                      {story.summary ?? story.title}
+                    </p>
+                  </div>
                 </button>
               </li>
             ))}

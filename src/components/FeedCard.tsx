@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import type { FeedItem } from '../types'
 import { navigateTo } from '../lib/routing'
-import { StoryActions } from './StoryActions'
+import { ShareFallbackBox, StoryActions } from './StoryActions'
 
 interface FeedCardProps {
   item: FeedItem
@@ -45,36 +46,51 @@ function CardThumbnail({ src, className }: { src: string; className?: string }) 
   )
 }
 
+function CardMetaRow({
+  item,
+  onBookmarkChange,
+}: {
+  item: FeedItem
+  onBookmarkChange?: () => void
+}) {
+  const [shareFallbackUrl, setShareFallbackUrl] = useState<string | null>(null)
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 text-[12px] sm:text-[13px] text-meta min-w-0">
+        <div className="flex items-center flex-nowrap gap-x-1 min-w-0 overflow-hidden">
+          <YouTubeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FF0000] shrink-0" />
+          <span className="font-medium text-stone truncate">{item.source_name}</span>
+          <span aria-hidden="true" className="shrink-0">·</span>
+          <span className="shrink-0">{formatRelativeTime(item.published_at)}</span>
+          {item.try_this && (
+            <span className="hidden sm:inline shrink-0">
+              <span aria-hidden="true"> · </span>
+              <span className="text-meta not-italic whitespace-nowrap">2-min tip</span>
+            </span>
+          )}
+        </div>
+        <StoryActions
+          id={item.id}
+          title={item.title}
+          summary={item.summary}
+          compact
+          className="card-actions shrink-0"
+          onBookmarkChange={onBookmarkChange}
+          onShareFallbackUrl={setShareFallbackUrl}
+        />
+      </div>
+      {shareFallbackUrl && <ShareFallbackBox url={shareFallbackUrl} />}
+    </div>
+  )
+}
+
 export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
   const thumbnail = item.thumbnail
 
   const handleOpenStory = () => {
     navigateTo(`/story/${item.id}`)
   }
-
-  const metaLine = (
-    <p className="flex items-center flex-wrap text-[12px] sm:text-[13px] text-meta gap-x-1 min-w-0 flex-1">
-      <YouTubeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FF0000] shrink-0" />
-      <span className="font-medium text-stone">{item.source_name}</span>
-      <span aria-hidden="true">·</span>
-      <span>{formatRelativeTime(item.published_at)}</span>
-      {item.try_this && (
-        <>
-          <span aria-hidden="true">·</span>
-          <span className="text-meta italic">Includes a 2-minute tip</span>
-        </>
-      )}
-      <span className="ml-auto flex items-center card-actions">
-        <StoryActions
-          id={item.id}
-          title={item.title}
-          summary={item.summary}
-          compact
-          onBookmarkChange={onBookmarkChange}
-        />
-      </span>
-    </p>
-  )
 
   return (
     <article className="card group">
@@ -93,7 +109,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
               </a>
             )}
             <div className="min-w-0 flex-1">
-              {metaLine}
+              <CardMetaRow item={item} onBookmarkChange={onBookmarkChange} />
               <a href={item.url} target="_blank" rel="noopener noreferrer" className="block mt-1">
                 <h3 className="text-[13px] font-medium leading-snug text-stone line-clamp-3">{item.title}</h3>
               </a>
@@ -112,7 +128,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
             </a>
           )}
           <div className="flex-1 min-w-0 flex flex-col">
-            {metaLine}
+            <CardMetaRow item={item} onBookmarkChange={onBookmarkChange} />
 
             {item.summary && (
               <button type="button" onClick={handleOpenStory} className="summary-box mb-2 mt-2 w-full text-left">

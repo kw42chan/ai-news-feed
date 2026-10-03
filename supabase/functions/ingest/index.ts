@@ -612,27 +612,30 @@ Deno.serve(async (req) => {
               openRouterModel
             );
 
-            const enrichedAt = new Date().toISOString();
-            const patch: Record<string, unknown> = { enriched_at: enrichedAt };
+            if (!result) {
+              return;
+            }
 
-            if (result) {
-              if (!item.keywords?.length && result.keywords.length > 0) {
-                patch.keywords = result.keywords;
-              }
-              if (!item.roles?.length && result.roles.length > 0) {
-                patch.roles = result.roles;
-              }
-              if (
-                (item.try_this === null || item.try_this === undefined) &&
-                result.try_this
-              ) {
-                patch.try_this = result.try_this;
-              }
+            const patch: Record<string, unknown> = {
+              enriched_at: new Date().toISOString(),
+            };
+
+            if (!item.keywords?.length && result.keywords.length > 0) {
+              patch.keywords = result.keywords;
+            }
+            if (!item.roles?.length && result.roles.length > 0) {
+              patch.roles = result.roles;
+            }
+            if (
+              (item.try_this === null || item.try_this === undefined) &&
+              result.try_this
+            ) {
+              patch.try_this = result.try_this;
             }
 
             await supabase.from("feed_items").update(patch).eq("id", item.id);
 
-            if (result?.keywords?.length) {
+            if (result.keywords?.length) {
               await ensureGlossaryTerms(
                 supabase,
                 result.keywords,
