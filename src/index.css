@@ -126,9 +126,15 @@ button, input {
 }
 
 .chip-active {
-  background: var(--color-signal-soft);
-  border-color: var(--color-signal);
-  color: var(--color-signal);
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  color: #ffffff;
+}
+
+.chip-active:hover {
+  background: #2d2d4a;
+  border-color: #2d2d4a;
+  color: #ffffff;
 }
 
 /* Segmented control */

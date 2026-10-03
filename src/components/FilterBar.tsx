@@ -22,12 +22,13 @@ export function FilterBar({
   onKeywordSelect,
 }: FilterBarProps) {
   const showKeywords = trendingKeywords.length > 0
+  const sectionTitle = sort === 'popular' ? 'Popular stories' : 'Latest stories'
 
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-5">
         <h2 id="feed-title" className="text-[20px] font-semibold text-ink">
-          Latest stories
+          {sectionTitle}
         </h2>
         <div className="seg-control" role="group" aria-label="Sort">
           {sortOptions.map((option) => (
