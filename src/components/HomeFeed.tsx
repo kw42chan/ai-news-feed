@@ -137,7 +137,7 @@ export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean 
     <main id="top">
       <div className="max-w-[1200px] mx-auto px-6 max-sm:px-4">
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-x-10 lg:items-start">
-          <section className="py-8 max-sm:py-5 lg:py-16 lg:col-start-1 lg:row-start-1 lg:pb-6 max-sm:pb-4">
+          <section className="py-8 max-sm:py-5 lg:py-16 lg:col-start-1 lg:row-start-1 lg:pb-4 max-sm:pb-3">
             <h1 className="font-display text-[42px] max-sm:text-[28px] font-semibold leading-[1.1] tracking-tight text-ink mb-3 max-sm:mb-2 max-w-[640px]">
               AI news for busy professionals, in plain English
             </h1>
@@ -148,16 +148,24 @@ export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean 
           </section>
 
           <aside
-            className="mb-4 max-sm:mb-3 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[4.5rem] lg:self-start lg:mt-16"
+            className="mb-4 max-sm:mb-3 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-3 lg:sticky lg:top-[4.5rem] lg:self-start lg:mt-16"
             aria-label="Morning digest signup"
           >
             <SignupBox compactOnMobile />
           </aside>
 
+          {!selectedKeyword && !feedRoleFilter && (
+            <div className="lg:col-start-1 lg:row-start-2 min-w-0">
+              <TopStoriesStrip />
+            </div>
+          )}
+
           <section
             id="feed"
             aria-labelledby="feed-title"
-            className="pb-20 max-sm:pb-12 lg:col-start-1 lg:row-start-2 min-w-0 max-sm:-mt-1"
+            className={`pb-20 max-sm:pb-12 lg:col-start-1 min-w-0 max-sm:-mt-1 ${
+              !selectedKeyword && !feedRoleFilter ? 'lg:row-start-3' : 'lg:row-start-2'
+            }`}
           >
             <MobileQuickLinks hasWeeklyRecap={hasWeeklyRecap} className="mb-3 -mt-1" />
             <FilterBar
@@ -170,8 +178,6 @@ export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean 
               onKeywordSelect={setSelectedKeyword}
               onFeedRoleFilterChange={handleRoleFilterChange}
             />
-
-            {!selectedKeyword && !feedRoleFilter && <TopStoriesStrip />}
 
             <KeywordYoutubeSection keyword={selectedKeyword} />
 

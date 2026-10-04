@@ -4,7 +4,7 @@ import { navigateTo } from '../lib/routing'
 import { fetchStoryGroupVideos } from '../lib/feed'
 import { trackStoryOpen, trackYoutubeClick } from '../lib/analytics'
 import { ShareFallbackBox, StoryActions } from './StoryActions'
-import { StoryGroupVideos } from './StoryGroupVideos'
+import { StoryCountPill, StoryGroupVideos } from './StoryGroupVideos'
 
 interface FeedCardProps {
   item: FeedItem
@@ -51,27 +51,32 @@ function CardThumbnail({ src, className }: { src: string; className?: string }) 
 
 function CardMetaRow({
   item,
+  videoCount,
   onBookmarkChange,
 }: {
   item: FeedItem
+  videoCount: number
   onBookmarkChange?: () => void
 }) {
   const [shareFallbackUrl, setShareFallbackUrl] = useState<string | null>(null)
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 w-full">
       <div className="flex items-center gap-2 text-[12px] sm:text-[13px] text-meta min-w-0">
-        <div className="flex items-center flex-nowrap gap-x-1 min-w-0 overflow-hidden">
-          <YouTubeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FF0000] shrink-0" />
-          <span className="font-medium text-stone truncate">{item.source_name}</span>
-          <span aria-hidden="true" className="shrink-0">·</span>
-          <span className="shrink-0">{formatRelativeTime(item.published_at)}</span>
-          {item.try_this && (
-            <span className="hidden sm:inline shrink-0">
-              <span aria-hidden="true"> · </span>
-              <span className="text-meta not-italic whitespace-nowrap">2-min tip</span>
-            </span>
-          )}
+        <div className="source-row-merged flex-1 min-w-0">
+          <div className="flex items-center flex-nowrap gap-x-1 min-w-0 overflow-hidden">
+            <YouTubeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FF0000] shrink-0" />
+            <span className="font-medium text-stone truncate">{item.source_name}</span>
+            <span aria-hidden="true" className="shrink-0 w-[3px] h-[3px] rounded-full bg-[#CBD5E1]" />
+            <span className="shrink-0">{formatRelativeTime(item.published_at)}</span>
+            {item.try_this && (
+              <span className="hidden sm:inline shrink-0">
+                <span aria-hidden="true"> · </span>
+                <span className="text-meta not-italic whitespace-nowrap">2-min tip</span>
+              </span>
+            )}
+          </div>
+          {videoCount > 1 && <StoryCountPill count={videoCount} />}
         </div>
         <StoryActions
           id={item.id}
@@ -92,6 +97,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
   const thumbnail = item.thumbnail
   const [groupVideos, setGroupVideos] = useState<FeedItem[] | null>(null)
   const videoCount = item.story_video_count ?? 1
+  const isMerged = videoCount > 1
 
   const handleOpenStory = () => {
     trackStoryOpen(item.id)
@@ -105,7 +111,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
   }
 
   return (
-    <article className="card group">
+    <article className={`card group${isMerged ? ' card-story-merged' : ''}`}>
       <div className="p-3 sm:p-4">
         <div className="sm:hidden">
           {item.summary && (
@@ -126,17 +132,14 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
               </a>
             )}
             <div className="min-w-0 flex-1">
-              <CardMetaRow item={item} onBookmarkChange={onBookmarkChange} />
+              <CardMetaRow item={item} videoCount={videoCount} onBookmarkChange={onBookmarkChange} />
               <a href={item.url} target="_blank" rel="noopener noreferrer" className="block mt-1">
                 <h3 className="text-[13px] font-medium leading-snug text-stone line-clamp-3">{item.title}</h3>
               </a>
             </div>
           </div>
 
-          {item.engagement_score > 0 && (
-            <p className="text-[12px] text-meta tabular-nums">{formatViews(item.engagement_score)}</p>
-          )}
-          {videoCount > 1 && (
+          {isMerged && (
             <StoryGroupVideos
               leadId={item.id}
               videos={groupVideos ?? [item]}
@@ -144,6 +147,10 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
               variant="card"
               onExpand={ensureGroupVideos}
             />
+          )}
+
+          {item.engagement_score > 0 && (
+            <p className="text-[12px] text-meta tabular-nums mt-2">{formatViews(item.engagement_score)}</p>
           )}
         </div>
 
@@ -160,7 +167,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
             </a>
           )}
           <div className="flex-1 min-w-0 flex flex-col">
-            <CardMetaRow item={item} onBookmarkChange={onBookmarkChange} />
+            <CardMetaRow item={item} videoCount={videoCount} onBookmarkChange={onBookmarkChange} />
 
             {item.summary && (
               <button type="button" onClick={handleOpenStory} className="summary-box mb-2 mt-2 w-full text-left">
@@ -172,10 +179,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
               <h3 className="text-[14px] font-medium leading-snug text-stone line-clamp-2 mb-2">{item.title}</h3>
             </a>
 
-            {item.engagement_score > 0 && (
-              <p className="text-[12px] text-meta tabular-nums mt-auto">{formatViews(item.engagement_score)}</p>
-            )}
-            {videoCount > 1 && (
+            {isMerged && (
               <StoryGroupVideos
                 leadId={item.id}
                 videos={groupVideos ?? [item]}
@@ -183,6 +187,10 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
                 variant="card"
                 onExpand={ensureGroupVideos}
               />
+            )}
+
+            {item.engagement_score > 0 && (
+              <p className="text-[12px] text-meta tabular-nums mt-auto">{formatViews(item.engagement_score)}</p>
             )}
           </div>
         </div>
