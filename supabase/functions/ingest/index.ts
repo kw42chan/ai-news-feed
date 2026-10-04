@@ -63,45 +63,93 @@ interface SummaryResponse {
   relevant?: boolean;
 }
 
-const HEADLINE_MAX_WORDS_FALLBACK = 12;
-const HEADLINE_HYPE_PATTERN =
-  /\b(insane|shocking|finally|just|game[- ]?changer|changes everything|you won'?t believe|must[- ]?see|breaking|unbelievable|mind[- ]?blowing)\b/i;
+const HEADLINE_MAX_WORDS = 12;
+
+const HEADLINE_INLINE_HYPE_PATTERN =
+  /\b(game[- ]?changer|changes everything|you won'?t believe|must[- ]?see|mind[- ]?blowing|unbelievable|insane|shocking)\b/gi;
 
 const HEADLINE_EMOJI_PATTERN =
   /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}]/gu;
 
 const HEADLINE_RULES_TEXT = `Write one plain-English headline (about 8 words or fewer, sentence case).
-Say plainly what happened. No hype words (insane, shocking, finally, just, changes everything, game-changer, etc.).
-No exclamation marks, emoji, hashtags, or clickbait questions.
+Say plainly what happened. Avoid hype (insane, shocking, game-changer, changes everything, etc.).
+Do not start with "Just" or "Finally" as clickbait. No exclamation marks, emoji, hashtags, or clickbait questions.
 Example: Google releases Gemini 4, its most capable model yet`;
+
+const MAX_HEADLINE_ATTEMPTS = 2;
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
-function postProcessHeadline(raw: string | null | undefined, fallbackTitle: string): string {
-  const titleFallback = fallbackTitle.trim();
-  if (!raw || typeof raw !== "string") return titleFallback;
-
-  let headline = raw
+function sanitizeHeadlineText(headline: string): string {
+  let text = headline
     .trim()
     .replace(HEADLINE_EMOJI_PATTERN, "")
     .replace(/#/g, "")
     .replace(/!/g, "")
+    .replace(/\?+$/g, "")
+    .replace(HEADLINE_INLINE_HYPE_PATTERN, "")
+    .replace(/^just\s+/i, "")
+    .replace(/^finally,?\s+/i, "")
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!headline || countWords(headline) > HEADLINE_MAX_WORDS_FALLBACK) {
-    return titleFallback;
+  if (text.length > 0) {
+    text = text.charAt(0).toUpperCase() + text.slice(1);
   }
-  if (HEADLINE_HYPE_PATTERN.test(headline)) {
-    return titleFallback;
+
+  return text;
+}
+
+/** Returns a storable headline or null (UI falls back to YouTube title). */
+function postProcessHeadline(
+  raw: string | null | undefined,
+  sourceTitle: string
+): string | null {
+  if (!raw || typeof raw !== "string") return null;
+
+  let headline = sanitizeHeadlineText(raw);
+  if (!headline) return null;
+
+  if (headline.toLowerCase() === sourceTitle.trim().toLowerCase()) {
+    return null;
   }
+
+  if (countWords(headline) > HEADLINE_MAX_WORDS) {
+    headline = headline.split(/\s+/).slice(0, HEADLINE_MAX_WORDS).join(" ");
+  }
+
+  if (!headline || countWords(headline) < 2) {
+    return null;
+  }
+
   if (headline.includes("?")) {
-    return titleFallback;
+    return null;
   }
 
   return headline;
+}
+
+async function persistHeadlineResult(
+  supabase: ReturnType<typeof createClient>,
+  itemId: string,
+  headline: string | null,
+  currentAttempts = 0
+): Promise<void> {
+  if (headline) {
+    await supabase
+      .from("feed_items")
+      .update({ headline, headline_attempts: 0 })
+      .eq("id", itemId);
+    return;
+  }
+
+  const nextAttempts = Math.min(currentAttempts + 1, MAX_HEADLINE_ATTEMPTS);
+  await supabase
+    .from("feed_items")
+    .update({ headline: null, headline_attempts: nextAttempts })
+    .eq("id", itemId);
 }
 
 async function generateHeadlineFromPrompt(
@@ -150,7 +198,7 @@ async function generateSingleVideoHeadline(
   summary: string,
   apiKey: string,
   model: string
-): Promise<string> {
+): Promise<string | null> {
   const prompt = `${HEADLINE_RULES_TEXT}
 
 Video title: "${title}"
@@ -166,7 +214,7 @@ async function generateGroupStoryHeadline(
   videos: Array<{ title: string; summary: string }>,
   apiKey: string,
   model: string
-): Promise<string> {
+): Promise<string | null> {
   const fallbackTitle = videos[0]?.title ?? "Story";
   const block = videos
     .map(
@@ -232,13 +280,22 @@ async function regenerateLeadGroupHeadline(
   );
   if (withSummary.length < 2) return;
 
+  const { data: leadRow } = await supabase
+    .from("feed_items")
+    .select("headline_attempts")
+    .eq("id", lead.id)
+    .maybeSingle();
+
+  const attempts = (leadRow?.headline_attempts as number | undefined) ?? 0;
+  if (attempts >= MAX_HEADLINE_ATTEMPTS) return;
+
   const headline = await generateGroupStoryHeadline(
     withSummary.map((m) => ({ title: m.title, summary: m.summary })),
     apiKey,
     model
   );
 
-  await supabase.from("feed_items").update({ headline }).eq("id", lead.id);
+  await persistHeadlineResult(supabase, lead.id, headline, attempts);
 }
 
 function extractYouTubeVideoId(url: string): string | null {
@@ -1264,7 +1321,7 @@ async function assignStoryGroupForItem(
   },
   apiKey: string,
   model: string
-): Promise<void> {
+): Promise<boolean> {
   const candidates = await fetchStoryLeadsNearPublishedAt(
     supabase,
     item.published_at,
@@ -1290,7 +1347,7 @@ async function assignStoryGroupForItem(
         story_grouped_at: groupedAt,
       })
       .eq("id", item.id);
-    return;
+    return false;
   }
 
   const rootId = await resolveRootLeadId(supabase, matchId);
@@ -1309,35 +1366,7 @@ async function assignStoryGroupForItem(
 
   await reelectStoryGroupLead(supabase, rootId);
   await regenerateLeadGroupHeadline(supabase, item.id, apiKey, model);
-}
-
-async function regenerateGroupHeadlinesForLeadsWithMembers(
-  supabase: ReturnType<typeof createClient>,
-  apiKey: string,
-  model: string,
-  limit: number
-): Promise<number> {
-  const { data: leads, error } = await supabase
-    .from("feed_items")
-    .select("id")
-    .eq("hidden", false)
-    .eq("is_story_lead", true)
-    .eq("is_ai_related", true)
-    .eq("source", "youtube")
-    .not("summary", "is", null)
-    .limit(limit * 3);
-
-  if (error || !leads) return 0;
-
-  let updated = 0;
-  for (const lead of leads) {
-    const members = await fetchStoryGroupMembersForHeadline(supabase, lead.id);
-    if (members.length < 2) continue;
-    await regenerateLeadGroupHeadline(supabase, lead.id, apiKey, model);
-    updated++;
-    if (updated >= limit) break;
-  }
-  return updated;
+  return true;
 }
 
 function enrichmentPatchFromResult(
@@ -1707,11 +1736,12 @@ Deno.serve(async (req) => {
 
       const { data: candidates, error: candidatesError } = await supabase
         .from("feed_items")
-        .select("id, title, summary, story_group_id, is_story_lead")
+        .select("id, title, summary, story_group_id, is_story_lead, headline_attempts")
         .eq("hidden", false)
         .not("summary", "is", null)
         .eq("source", "youtube")
         .is("headline", null)
+        .lt("headline_attempts", MAX_HEADLINE_ATTEMPTS)
         .or("story_group_id.is.null,is_story_lead.eq.true")
         .order("published_at", { ascending: true })
         .limit(backfillLimit);
@@ -1725,7 +1755,9 @@ Deno.serve(async (req) => {
         const members = await fetchStoryGroupMembersForHeadline(supabase, item.id);
         const lead = members.find((m) => m.is_story_lead) ?? members[0];
 
-        let headline: string;
+        const attempts = (item.headline_attempts as number | undefined) ?? 0;
+        let headline: string | null;
+
         if (members.length >= 2 && lead?.id === item.id) {
           const withSummary = members.filter(
             (m): m is { title: string; summary: string } =>
@@ -1754,7 +1786,7 @@ Deno.serve(async (req) => {
           );
         }
 
-        await supabase.from("feed_items").update({ headline }).eq("id", item.id);
+        await persistHeadlineResult(supabase, item.id, headline, attempts);
         itemsUpdated++;
       }
 
@@ -1765,6 +1797,7 @@ Deno.serve(async (req) => {
         .not("summary", "is", null)
         .eq("source", "youtube")
         .is("headline", null)
+        .lt("headline_attempts", MAX_HEADLINE_ATTEMPTS)
         .or("story_group_id.is.null,is_story_lead.eq.true");
 
       return new Response(
@@ -1837,9 +1870,10 @@ Deno.serve(async (req) => {
       if (candidatesError) throw candidatesError;
 
       let itemsGrouped = 0;
+      let groupHeadlinesUpdated = 0;
       for (const item of candidates || []) {
         if (!item.summary || !item.published_at) continue;
-        await assignStoryGroupForItem(
+        const joinedGroup = await assignStoryGroupForItem(
           supabase,
           {
             id: item.id,
@@ -1851,15 +1885,9 @@ Deno.serve(async (req) => {
           openRouterKey,
           openRouterModel
         );
+        if (joinedGroup) groupHeadlinesUpdated++;
         itemsGrouped++;
       }
-
-      const groupHeadlinesUpdated = await regenerateGroupHeadlinesForLeadsWithMembers(
-        supabase,
-        openRouterKey,
-        openRouterModel,
-        backfillLimit
-      );
 
       const { count: remaining } = await supabase
         .from("feed_items")

@@ -177,7 +177,7 @@ Apply migration `20261003000012_keyword_video_daily_quota.sql` before deploying 
 3. `20261004000003_subscribers_attribution.sql`
 4. `20261004000004_feed_story_leads_view.sql`
 5. `20261004000005_feed_items_backfill_markers.sql`
-6. `20261004000006_feed_items_headline.sql`
+6. `20261004000006_feed_items_headline.sql` (adds `headline`, `headline_attempts`, recreates `feed_story_leads`)
 
 Then redeploy **`ingest`** and **`weekly-recap`**. Backfills (POST + `x-cron-secret`; repeat each until `remaining` is 0):
 
