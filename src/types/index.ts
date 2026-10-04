@@ -22,6 +22,7 @@ export interface FeedItem {
   source_name: string
   author: string | null
   title: string
+  headline: string | null
   url: string
   thumbnail: string | null
   published_at: string

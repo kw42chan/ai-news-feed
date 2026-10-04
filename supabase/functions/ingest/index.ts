@@ -53,6 +53,7 @@ interface FeedItem {
 
 interface SummaryResponse {
   summary: string;
+  headline: string | null;
   tags: string[];
   keywords: string[];
   roles: string[];
@@ -60,6 +61,184 @@ interface SummaryResponse {
   key_points: string[];
   is_ai_related: boolean;
   relevant?: boolean;
+}
+
+const HEADLINE_MAX_WORDS_FALLBACK = 12;
+const HEADLINE_HYPE_PATTERN =
+  /\b(insane|shocking|finally|just|game[- ]?changer|changes everything|you won'?t believe|must[- ]?see|breaking|unbelievable|mind[- ]?blowing)\b/i;
+
+const HEADLINE_EMOJI_PATTERN =
+  /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}]/gu;
+
+const HEADLINE_RULES_TEXT = `Write one plain-English headline (about 8 words or fewer, sentence case).
+Say plainly what happened. No hype words (insane, shocking, finally, just, changes everything, game-changer, etc.).
+No exclamation marks, emoji, hashtags, or clickbait questions.
+Example: Google releases Gemini 4, its most capable model yet`;
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function postProcessHeadline(raw: string | null | undefined, fallbackTitle: string): string {
+  const titleFallback = fallbackTitle.trim();
+  if (!raw || typeof raw !== "string") return titleFallback;
+
+  let headline = raw
+    .trim()
+    .replace(HEADLINE_EMOJI_PATTERN, "")
+    .replace(/#/g, "")
+    .replace(/!/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!headline || countWords(headline) > HEADLINE_MAX_WORDS_FALLBACK) {
+    return titleFallback;
+  }
+  if (HEADLINE_HYPE_PATTERN.test(headline)) {
+    return titleFallback;
+  }
+  if (headline.includes("?")) {
+    return titleFallback;
+  }
+
+  return headline;
+}
+
+async function generateHeadlineFromPrompt(
+  prompt: string,
+  apiKey: string,
+  model: string
+): Promise<string | null> {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ai-news-feed.vercel.app",
+        "X-Title": "AI News Feed",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 80,
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content || typeof content !== "string") return null;
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (typeof parsed.headline === "string") return parsed.headline.trim();
+    }
+
+    const line = content.split("\n").map((l: string) => l.trim()).find(Boolean);
+    return line ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function generateSingleVideoHeadline(
+  title: string,
+  summary: string,
+  apiKey: string,
+  model: string
+): Promise<string> {
+  const prompt = `${HEADLINE_RULES_TEXT}
+
+Video title: "${title}"
+Summary: ${summary}
+
+Reply JSON only: {"headline": "..."}`;
+
+  const raw = await generateHeadlineFromPrompt(prompt, apiKey, model);
+  return postProcessHeadline(raw, title);
+}
+
+async function generateGroupStoryHeadline(
+  videos: Array<{ title: string; summary: string }>,
+  apiKey: string,
+  model: string
+): Promise<string> {
+  const fallbackTitle = videos[0]?.title ?? "Story";
+  const block = videos
+    .map(
+      (v, i) =>
+        `Video ${i + 1}:\nTitle: ${v.title}\nSummary: ${v.summary}`
+    )
+    .join("\n\n");
+
+  const prompt = `${HEADLINE_RULES_TEXT}
+
+These YouTube videos cover the SAME news story. Write ONE headline for the shared story (not any single video).
+
+${block}
+
+Reply JSON only: {"headline": "..."}`;
+
+  const raw = await generateHeadlineFromPrompt(prompt, apiKey, model);
+  return postProcessHeadline(raw, fallbackTitle);
+}
+
+async function fetchStoryGroupMembersForHeadline(
+  supabase: ReturnType<typeof createClient>,
+  itemId: string
+): Promise<Array<{ id: string; title: string; summary: string | null; is_story_lead: boolean }>> {
+  const { data: row } = await supabase
+    .from("feed_items")
+    .select("id, story_group_id, is_story_lead")
+    .eq("id", itemId)
+    .maybeSingle();
+
+  if (!row) return [];
+
+  const groupKey =
+    row.is_story_lead === true ? row.id : (row.story_group_id as string | null) ?? row.id;
+
+  const { data } = await supabase
+    .from("feed_items")
+    .select("id, title, summary, is_story_lead")
+    .or(`id.eq.${groupKey},story_group_id.eq.${groupKey}`)
+    .eq("hidden", false);
+
+  return (data ?? []).filter(
+    (m): m is { id: string; title: string; summary: string | null; is_story_lead: boolean } =>
+      typeof m.id === "string" && typeof m.title === "string"
+  );
+}
+
+async function regenerateLeadGroupHeadline(
+  supabase: ReturnType<typeof createClient>,
+  memberItemId: string,
+  apiKey: string,
+  model: string
+): Promise<void> {
+  const members = await fetchStoryGroupMembersForHeadline(supabase, memberItemId);
+  if (members.length < 2) return;
+
+  const lead = members.find((m) => m.is_story_lead) ?? members[0];
+  if (!lead?.id) return;
+
+  const withSummary = members.filter(
+    (m): m is { id: string; title: string; summary: string; is_story_lead: boolean } =>
+      typeof m.summary === "string" && m.summary.trim().length > 0
+  );
+  if (withSummary.length < 2) return;
+
+  const headline = await generateGroupStoryHeadline(
+    withSummary.map((m) => ({ title: m.title, summary: m.summary })),
+    apiKey,
+    model
+  );
+
+  await supabase.from("feed_items").update({ headline }).eq("id", lead.id);
 }
 
 function extractYouTubeVideoId(url: string): string | null {
@@ -753,12 +932,13 @@ For the following content, provide:
 5. If this is a how-to or tutorial video, one concrete "try this" action someone can do in about 2 minutes (e.g. "Open ChatGPT and ask it to…"). Otherwise null.
 6. 3-5 short plain-English bullet points (key_points): what the video covers and why it matters for work. Each bullet one sentence, no jargon.
 7. is_ai_related: true if the video is about AI products, models, policy, or meaningful AI at work; false for general Zoom/Excel/productivity tips with no AI angle, memes, or off-topic content
+8. headline: ${HEADLINE_RULES_TEXT}
 
 Content Title: "${title}"
 Source: ${sourceName}${contextBlock}
 
 Respond in JSON only:
-{"summary": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "roles": ["..."], "try_this": "..." or null, "key_points": ["...", "..."], "is_ai_related": true/false}`;
+{"summary": "...", "headline": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "roles": ["..."], "try_this": "..." or null, "key_points": ["...", "..."], "is_ai_related": true/false}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -814,8 +994,14 @@ Respond in JSON only:
       parsed.is_ai_related !== "false" &&
       parsed.relevant !== false;
 
+    const headline = postProcessHeadline(
+      typeof parsed.headline === "string" ? parsed.headline : null,
+      title
+    );
+
     return {
       summary: parsed.summary || null,
+      headline,
       tags: validTags.slice(0, 3),
       keywords,
       roles,
@@ -1122,6 +1308,36 @@ async function assignStoryGroupForItem(
     .eq("id", item.id);
 
   await reelectStoryGroupLead(supabase, rootId);
+  await regenerateLeadGroupHeadline(supabase, item.id, apiKey, model);
+}
+
+async function regenerateGroupHeadlinesForLeadsWithMembers(
+  supabase: ReturnType<typeof createClient>,
+  apiKey: string,
+  model: string,
+  limit: number
+): Promise<number> {
+  const { data: leads, error } = await supabase
+    .from("feed_items")
+    .select("id")
+    .eq("hidden", false)
+    .eq("is_story_lead", true)
+    .eq("is_ai_related", true)
+    .eq("source", "youtube")
+    .not("summary", "is", null)
+    .limit(limit * 3);
+
+  if (error || !leads) return 0;
+
+  let updated = 0;
+  for (const lead of leads) {
+    const members = await fetchStoryGroupMembersForHeadline(supabase, lead.id);
+    if (members.length < 2) continue;
+    await regenerateLeadGroupHeadline(supabase, lead.id, apiKey, model);
+    updated++;
+    if (updated >= limit) break;
+  }
+  return updated;
 }
 
 function enrichmentPatchFromResult(
@@ -1134,6 +1350,7 @@ function enrichmentPatchFromResult(
 
   const patch: Record<string, unknown> = {
     summary: result.summary,
+    headline: result.headline,
     tags: result.tags,
     keywords: result.keywords,
     roles: result.roles,
@@ -1480,6 +1697,88 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (requestBody.mode === "backfill_headlines") {
+      if (!openRouterKey) {
+        return new Response(
+          JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: candidates, error: candidatesError } = await supabase
+        .from("feed_items")
+        .select("id, title, summary, story_group_id, is_story_lead")
+        .eq("hidden", false)
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .is("headline", null)
+        .or("story_group_id.is.null,is_story_lead.eq.true")
+        .order("published_at", { ascending: true })
+        .limit(backfillLimit);
+
+      if (candidatesError) throw candidatesError;
+
+      let itemsUpdated = 0;
+      for (const item of candidates || []) {
+        if (!item.summary) continue;
+
+        const members = await fetchStoryGroupMembersForHeadline(supabase, item.id);
+        const lead = members.find((m) => m.is_story_lead) ?? members[0];
+
+        let headline: string;
+        if (members.length >= 2 && lead?.id === item.id) {
+          const withSummary = members.filter(
+            (m): m is { title: string; summary: string } =>
+              typeof m.summary === "string" && m.summary.trim().length > 0
+          );
+          if (withSummary.length < 2) {
+            headline = await generateSingleVideoHeadline(
+              item.title,
+              item.summary,
+              openRouterKey,
+              openRouterModel
+            );
+          } else {
+            headline = await generateGroupStoryHeadline(
+              withSummary.map((m) => ({ title: m.title, summary: m.summary })),
+              openRouterKey,
+              openRouterModel
+            );
+          }
+        } else {
+          headline = await generateSingleVideoHeadline(
+            item.title,
+            item.summary,
+            openRouterKey,
+            openRouterModel
+          );
+        }
+
+        await supabase.from("feed_items").update({ headline }).eq("id", item.id);
+        itemsUpdated++;
+      }
+
+      const { count: remaining } = await supabase
+        .from("feed_items")
+        .select("id", { count: "exact", head: true })
+        .eq("hidden", false)
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .is("headline", null)
+        .or("story_group_id.is.null,is_story_lead.eq.true");
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "backfill_headlines",
+          itemsUpdated,
+          remaining: remaining ?? 0,
+          durationMs: Date.now() - startTime,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (requestBody.mode === "backfill_reset_story_groups") {
       const dryRun = requestBody.dry_run === true;
 
@@ -1555,6 +1854,13 @@ Deno.serve(async (req) => {
         itemsGrouped++;
       }
 
+      const groupHeadlinesUpdated = await regenerateGroupHeadlinesForLeadsWithMembers(
+        supabase,
+        openRouterKey,
+        openRouterModel,
+        backfillLimit
+      );
+
       const { count: remaining } = await supabase
         .from("feed_items")
         .select("id", { count: "exact", head: true })
@@ -1569,6 +1875,7 @@ Deno.serve(async (req) => {
           success: true,
           mode: "backfill_story_groups",
           itemsProcessed: itemsGrouped,
+          groupHeadlinesUpdated,
           remaining: remaining ?? 0,
           durationMs: Date.now() - startTime,
         }),

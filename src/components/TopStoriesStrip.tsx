@@ -4,6 +4,7 @@ import type { FeedItem } from '../types'
 import { fetchStoryGroupVideos, fetchTopStories } from '../lib/feed'
 import { navigateTo } from '../lib/routing'
 import { trackStoryOpen } from '../lib/analytics'
+import { topStoryDisplayTitle } from '../lib/headline'
 
 function formatTop3Date(): string {
   return new Date().toLocaleDateString('en-GB', {
@@ -101,7 +102,7 @@ export function TopStoriesStrip() {
                 >
                   <span className="top3-num" aria-hidden="true">{index + 1}</span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="top3-item-title line-clamp-2">{story.title}</h3>
+                    <h3 className="top3-item-title line-clamp-2">{topStoryDisplayTitle(story)}</h3>
                     {story.summary && (
                       <p className="top3-item-summary line-clamp-3">{story.summary}</p>
                     )}

@@ -5,6 +5,7 @@ import { fetchStoryGroupVideos } from '../lib/feed'
 import { trackStoryOpen, trackYoutubeClick } from '../lib/analytics'
 import { ShareFallbackBox, StoryActions } from './StoryActions'
 import { StoryCountPill, StoryGroupVideos } from './StoryGroupVideos'
+import { feedCardDisplayTitle } from '../lib/headline'
 
 interface FeedCardProps {
   item: FeedItem
@@ -98,6 +99,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
   const [groupVideos, setGroupVideos] = useState<FeedItem[] | null>(null)
   const videoCount = item.story_video_count ?? 1
   const isMerged = videoCount > 1
+  const cardTitle = feedCardDisplayTitle(item)
 
   const handleOpenStory = () => {
     trackStoryOpen(item.id)
@@ -134,7 +136,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
             <div className="min-w-0 flex-1">
               <CardMetaRow item={item} videoCount={videoCount} onBookmarkChange={onBookmarkChange} />
               <a href={item.url} target="_blank" rel="noopener noreferrer" className="block mt-1">
-                <h3 className="text-[13px] font-medium leading-snug text-stone line-clamp-3">{item.title}</h3>
+                <h3 className="text-[13px] font-medium leading-snug text-stone line-clamp-3">{cardTitle}</h3>
               </a>
             </div>
           </div>
@@ -176,7 +178,7 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
             )}
 
             <a href={item.url} target="_blank" rel="noopener noreferrer">
-              <h3 className="text-[14px] font-medium leading-snug text-stone line-clamp-2 mb-2">{item.title}</h3>
+              <h3 className="text-[14px] font-medium leading-snug text-stone line-clamp-2 mb-2">{cardTitle}</h3>
             </a>
 
             {isMerged && (

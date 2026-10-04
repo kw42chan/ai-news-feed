@@ -10,6 +10,7 @@ import { navigateTo } from '../lib/routing'
 import type { FeedItem } from '../types'
 import { GlossaryTerm } from './GlossaryTerm'
 import { StoryActions } from './StoryActions'
+import { storyPageTitles } from '../lib/headline'
 
 interface StoryPageProps {
   id: string
@@ -32,7 +33,6 @@ export function StoryPage({ id }: StoryPageProps) {
           setError('This story could not be found.')
           return
         }
-        document.title = `${story.title} — AI News, Minus the Noise`
         trackStoryOpen(story.id)
         const [more, group] = await Promise.all([
           fetchRelatedStories(story).catch(() => []),
@@ -40,6 +40,9 @@ export function StoryPage({ id }: StoryPageProps) {
         ])
         setRelated(more)
         setGroupVideos(group)
+        const isMergedGroup = group.length > 1
+        const { heading } = storyPageTitles(story, isMergedGroup)
+        document.title = `${heading} — AI News, Minus the Noise`
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false))
@@ -66,6 +69,8 @@ export function StoryPage({ id }: StoryPageProps) {
   }
 
   const keywords = item.keywords?.length ? item.keywords : item.tags.slice(0, 3)
+  const isMergedGroup = groupVideos.length > 1
+  const { heading, youtubeTitle } = storyPageTitles(item, isMergedGroup)
 
   return (
     <article className="editorial-page py-10 max-sm:py-8 max-w-[680px]">
@@ -73,9 +78,14 @@ export function StoryPage({ id }: StoryPageProps) {
         {item.source_name} · {formatStoryDate(item.published_at)}
       </p>
       <div className="flex items-start justify-between gap-4 mb-5">
-        <h1 className="font-display text-[34px] max-sm:text-[26px] font-semibold text-ink leading-[1.15] tracking-tight">
-          {item.title}
-        </h1>
+        <div className="min-w-0">
+          <h1 className="font-display text-[34px] max-sm:text-[26px] font-semibold text-ink leading-[1.15] tracking-tight">
+            {heading}
+          </h1>
+          {youtubeTitle && (
+            <p className="text-[15px] text-stone mt-2 leading-snug">{youtubeTitle}</p>
+          )}
+        </div>
         <StoryActions id={item.id} title={item.title} summary={item.summary} className="shrink-0 pt-1" />
       </div>
 

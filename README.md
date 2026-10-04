@@ -177,6 +177,7 @@ Apply migration `20261003000012_keyword_video_daily_quota.sql` before deploying 
 3. `20261004000003_subscribers_attribution.sql`
 4. `20261004000004_feed_story_leads_view.sql`
 5. `20261004000005_feed_items_backfill_markers.sql`
+6. `20261004000006_feed_items_headline.sql`
 
 Then redeploy **`ingest`** and **`weekly-recap`**. Backfills (POST + `x-cron-secret`; repeat each until `remaining` is 0):
 
@@ -204,6 +205,12 @@ curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
   -H "x-cron-secret: $INGEST_CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"mode":"backfill_story_groups","limit":40}'
+
+# 5) Plain-English headlines (oldest first; singles + group leads only)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_headlines","limit":40}'
 ```
 
 **Re-run story grouping from scratch** (after tightening match rules; no new migration):
@@ -231,7 +238,6 @@ curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
 Then repeat step 4 (`backfill_story_groups`) until `remaining` is 0.
 
 **Post-bef6085 quality fixes:** redeploy **`ingest` only** (stricter story matching, root-lead chaining, `story_grouped_at` on ingest grouping, keyword prompt/filter, YouTube RSS→Data API fallback). Ensure `YOUTUBE_API_KEY` is in Vault (same key as `keyword-videos`).
-```
 
 **Darwin (Vercel):** enable Web Analytics in the project dashboard; custom `track()` events need Pro.
 
