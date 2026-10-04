@@ -50,6 +50,43 @@ function CardThumbnail({ src, className }: { src: string; className?: string }) 
   )
 }
 
+function CardStoryTitle({ title, onOpen }: { title: string; onOpen: () => void }) {
+  return (
+    <h3 className="m-0 mt-1 font-medium leading-snug">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="story-card-title w-full text-left rounded-sm text-[13px] sm:text-[14px] text-stone line-clamp-3 sm:line-clamp-2 cursor-pointer hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2"
+      >
+        {title}
+      </button>
+    </h3>
+  )
+}
+
+function WatchOnYoutubeLink({
+  itemId,
+  url,
+  placement,
+}: {
+  itemId: string
+  url: string
+  placement: 'feed_card_mobile' | 'feed_card_desktop'
+}) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => trackYoutubeClick(placement, itemId)}
+      className="inline-flex items-center gap-1 text-[12px] text-meta hover:text-signal transition-colors underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 rounded-sm"
+    >
+      <YouTubeIcon className="w-3.5 h-3.5 text-[#FF0000]" />
+      Watch on YouTube
+    </a>
+  )
+}
+
 function CardMetaRow({
   item,
   videoCount,
@@ -135,9 +172,10 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
             )}
             <div className="min-w-0 flex-1">
               <CardMetaRow item={item} videoCount={videoCount} onBookmarkChange={onBookmarkChange} />
-              <a href={item.url} target="_blank" rel="noopener noreferrer" className="block mt-1">
-                <h3 className="text-[13px] font-medium leading-snug text-stone line-clamp-3">{cardTitle}</h3>
-              </a>
+              <CardStoryTitle title={cardTitle} onOpen={handleOpenStory} />
+              <div className="mt-1.5">
+                <WatchOnYoutubeLink itemId={item.id} url={item.url} placement="feed_card_mobile" />
+              </div>
             </div>
           </div>
 
@@ -177,9 +215,11 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
               </button>
             )}
 
-            <a href={item.url} target="_blank" rel="noopener noreferrer">
-              <h3 className="text-[14px] font-medium leading-snug text-stone line-clamp-2 mb-2">{cardTitle}</h3>
-            </a>
+            <CardStoryTitle title={cardTitle} onOpen={handleOpenStory} />
+
+            <div className="mb-2">
+              <WatchOnYoutubeLink itemId={item.id} url={item.url} placement="feed_card_desktop" />
+            </div>
 
             {isMerged && (
               <StoryGroupVideos

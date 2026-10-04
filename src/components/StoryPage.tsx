@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, Loader2 } from 'lucide-react'
 import { fetchFeedItemById, fetchRelatedStories, fetchStoryGroupVideos } from '../lib/feed'
-import { trackStoryOpen } from '../lib/analytics'
+import { trackStoryOpen, trackYoutubeClick } from '../lib/analytics'
 import { StoryGroupVideos } from './StoryGroupVideos'
 import { loadGlossary, lookupGlossary } from '../lib/glossary'
 import type { GlossaryEntry } from '../lib/glossary'
@@ -132,6 +132,7 @@ export function StoryPage({ id }: StoryPageProps) {
         target="_blank"
         rel="noopener noreferrer"
         className="btn-primary inline-flex items-center gap-2"
+        onClick={() => trackYoutubeClick('story_page', item.id)}
       >
         Watch on YouTube
         <ExternalLink className="w-4 h-4" />

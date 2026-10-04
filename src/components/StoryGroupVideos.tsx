@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { ChevronDown, Layers } from 'lucide-react'
 import type { FeedItem } from '../types'
-import { trackYoutubeClick } from '../lib/analytics'
+import { navigateTo } from '../lib/routing'
+import { trackStoryOpen, trackYoutubeClick } from '../lib/analytics'
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString)
@@ -83,25 +84,33 @@ export function StoryGroupVideos({
         {expanded && others.length > 0 && (
           <ul className="story-video-list">
             {others.map((video) => (
-              <li key={video.id}>
+              <li key={video.id} className="story-video-list-item">
                 <a
                   href={video.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => trackYoutubeClick('story_group_card', video.id)}
+                  className="story-video-list-thumb"
+                  onClick={() => trackYoutubeClick('story_group_card_thumb', video.id)}
                 >
                   {video.thumbnail ? (
                     <img src={video.thumbnail} alt="" loading="lazy" />
                   ) : (
-                    <span className="w-16 h-9 rounded-md bg-mist shrink-0" />
+                    <span className="w-16 h-9 rounded-md bg-mist shrink-0 block" />
                   )}
-                  <div className="min-w-0">
-                    <div className="v-title">{video.title}</div>
-                    <div className="v-meta">
-                      {video.source_name} · {formatRelativeTime(video.published_at)}
-                    </div>
-                  </div>
                 </a>
+                <button
+                  type="button"
+                  className="story-video-list-story-btn"
+                  onClick={() => {
+                    trackStoryOpen(video.id)
+                    navigateTo(`/story/${video.id}`)
+                  }}
+                >
+                  <div className="v-title">{video.title}</div>
+                  <div className="v-meta">
+                    {video.source_name} · {formatRelativeTime(video.published_at)}
+                  </div>
+                </button>
               </li>
             ))}
           </ul>
@@ -110,30 +119,42 @@ export function StoryGroupVideos({
     )
   }
 
+  const allVideos = videos.length > 0 ? videos : others
+
   return (
     <section className="mb-8" aria-labelledby="group-videos-title">
       <h2 id="group-videos-title" className="font-display text-[22px] font-semibold text-ink mb-3">
-        More videos on this story
+        Videos on this story
       </h2>
       <ul className="story-video-list">
-        {others.map((video) => (
-          <li key={video.id}>
+        {allVideos.map((video) => (
+          <li key={video.id} className="story-video-list-item">
             <a
               href={video.url}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => trackYoutubeClick('story_group_page', video.id)}
+              className="story-video-list-thumb"
+              onClick={() => trackYoutubeClick('story_group_page_thumb', video.id)}
             >
-              {video.thumbnail && (
+              {video.thumbnail ? (
                 <img src={video.thumbnail} alt="" loading="lazy" />
+              ) : (
+                <span className="w-16 h-9 rounded-md bg-mist shrink-0 block" />
               )}
-              <div className="min-w-0">
-                <div className="v-title">{video.title}</div>
-                <div className="v-meta">
-                  {video.source_name} · {formatRelativeTime(video.published_at)}
-                </div>
-              </div>
             </a>
+            <button
+              type="button"
+              className="story-video-list-story-btn"
+              onClick={() => {
+                trackStoryOpen(video.id)
+                navigateTo(`/story/${video.id}`)
+              }}
+            >
+              <div className="v-title">{video.title}</div>
+              <div className="v-meta">
+                {video.source_name} · {formatRelativeTime(video.published_at)}
+              </div>
+            </button>
           </li>
         ))}
       </ul>
