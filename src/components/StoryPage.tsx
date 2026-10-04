@@ -56,8 +56,7 @@ export function StoryPage({ id }: StoryPageProps) {
         ])
         setRelated(more)
         setGroupVideos(group.length > 0 ? group : [story])
-        const isMergedGroup = group.length > 1
-        const { heading } = storyPageTitles(story, isMergedGroup)
+        const { heading } = storyPageTitles(story)
         document.title = `${heading} — AI News, Minus the Noise`
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'))
@@ -85,18 +84,10 @@ export function StoryPage({ id }: StoryPageProps) {
   }
 
   const keywords = item.keywords?.length ? item.keywords : item.tags.slice(0, 3)
-  const isMergedGroup = groupVideos.length > 1
-  const { heading, youtubeTitle } = storyPageTitles(item, isMergedGroup)
+  const { heading, youtubeTitle } = storyPageTitles(item)
   const videoCount = groupVideos.length
   const updatedLabel = formatRelativeUpdated(item.updated_at || item.published_at)
   const roles = item.roles?.length ? item.roles : []
-
-  const sidebarContent = (
-    <>
-      <StoryPageVideos videos={groupVideos} featuredId={item.id} />
-      <SignupBox sidebar />
-    </>
-  )
 
   return (
     <div className="story-page">
@@ -177,11 +168,12 @@ export function StoryPage({ id }: StoryPageProps) {
               <p className="story-try-body">{item.try_this}</p>
             </section>
           )}
-
-          <aside className="story-aside story-aside-mobile lg:hidden">{sidebarContent}</aside>
         </article>
 
-        <aside className="story-aside hidden lg:flex">{sidebarContent}</aside>
+        <aside className="story-aside">
+          <StoryPageVideos videos={groupVideos} featuredId={item.id} />
+          <SignupBox sidebar />
+        </aside>
       </div>
 
       {related.length > 0 && (

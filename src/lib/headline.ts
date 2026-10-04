@@ -19,15 +19,11 @@ export function storyPageHeading(item: FeedItem): string {
   return h || item.title
 }
 
-export function storyPageTitles(
-  item: FeedItem,
-  isMergedGroup: boolean
-): { heading: string; youtubeTitle?: string } {
-  const heading = storyPageHeading(item)
-  const showYoutubeSubtitle =
-    isMergedGroup || (item.headline?.trim() && item.headline.trim() !== item.title)
-  return {
-    heading,
-    youtubeTitle: showYoutubeSubtitle ? item.title : undefined,
+export function storyPageTitles(item: FeedItem): { heading: string; youtubeTitle?: string } {
+  const h = item.headline?.trim()
+  const heading = h || item.title
+  if (!h || h === item.title) {
+    return { heading }
   }
+  return { heading, youtubeTitle: item.title }
 }
