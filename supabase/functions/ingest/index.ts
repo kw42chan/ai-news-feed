@@ -187,28 +187,63 @@ function normalizeKeywords(raw: unknown): string[] {
   return result;
 }
 
-const MODEL_KEYWORD_PATTERN =
-  /^(chatgpt|gpt[\d.]*|claude|gemini|opus|sonnet|openai|anthropic|copilot|llama|deepseek|mistral)/i;
+const KEYWORD_SYNONYMS: Record<string, string[]> = {
+  "ai agents": ["ai agent", "autonomous agents", "agentic ai"],
+  "ai agent": ["ai agents", "autonomous agents", "agentic ai"],
+  "large language model": ["llm", "large language models"],
+  llm: ["large language model", "large language models"],
+  "machine learning": ["ml"],
+  ml: ["machine learning"],
+};
 
-function keywordAppearsInSource(keyword: string, title: string, description: string): boolean {
-  const hay = `${title}\n${description}`.toLowerCase();
-  const lower = keyword.toLowerCase().trim();
-  if (!lower) return false;
-  if (hay.includes(lower)) return true;
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-  const parts = lower.split(/[\s/]+/).filter((p) => p.length > 1);
-  if (parts.length > 1 && parts.every((p) => hay.includes(p))) return true;
+function keywordPhraseVariants(keyword: string): string[] {
+  const trimmed = keyword.trim();
+  if (!trimmed) return [];
 
-  const alnumHay = hay.replace(/[^a-z0-9]/g, "");
-  const alnumKw = lower.replace(/[^a-z0-9]/g, "");
-  if (alnumKw.length >= 4 && alnumHay.includes(alnumKw)) return true;
+  const seen = new Set<string>();
+  const variants: string[] = [];
 
-  if (MODEL_KEYWORD_PATTERN.test(keyword)) {
-    const head = lower.split(/[\s-]/)[0];
-    return hay.includes(head);
+  const add = (phrase: string) => {
+    const key = phrase.toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    variants.push(phrase);
+  };
+
+  add(trimmed);
+
+  const lower = trimmed.toLowerCase();
+  for (const synonym of KEYWORD_SYNONYMS[lower] ?? []) {
+    add(synonym);
   }
 
-  return hay.includes(parts[0] ?? lower);
+  if (trimmed.endsWith("s") && trimmed.length > 3) {
+    add(trimmed.slice(0, -1));
+  } else if (!trimmed.endsWith("s")) {
+    add(`${trimmed}s`);
+  }
+
+  return variants;
+}
+
+function phraseMatchesAsWholeWords(text: string, phrase: string): boolean {
+  const parts = phrase.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return false;
+
+  const pattern = parts.map((p) => escapeRegExp(p)).join("\\s+");
+  const re = new RegExp(`(?<![A-Za-z0-9])${pattern}(?![A-Za-z0-9])`, "i");
+  return re.test(text);
+}
+
+function keywordAppearsInSource(keyword: string, title: string, description: string): boolean {
+  const hay = `${title}\n${description}`;
+  const variants = keywordPhraseVariants(keyword);
+
+  return variants.some((variant) => phraseMatchesAsWholeWords(hay, variant));
 }
 
 function filterKeywordsToSource(
@@ -268,6 +303,58 @@ function channelIdToUploadsPlaylistId(channelId: string): string {
   return channelId;
 }
 
+const YOUTUBE_SHORT_MAX_SECONDS = 60;
+
+function parseIso8601DurationSeconds(duration: string): number | null {
+  const match = duration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!match) return null;
+  const hours = parseInt(match[1] || "0", 10);
+  const minutes = parseInt(match[2] || "0", 10);
+  const seconds = parseInt(match[3] || "0", 10);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+type YouTubeVideoDetails = {
+  viewCount: number;
+  durationSeconds: number | null;
+};
+
+async function fetchYouTubeVideoDetails(
+  videoIds: string[],
+  apiKey: string
+): Promise<Map<string, YouTubeVideoDetails>> {
+  const details = new Map<string, YouTubeVideoDetails>();
+  if (videoIds.length === 0) return details;
+
+  const apiUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+  apiUrl.searchParams.set("part", "statistics,contentDetails");
+  apiUrl.searchParams.set("id", videoIds.slice(0, 50).join(","));
+  apiUrl.searchParams.set("key", apiKey);
+
+  const response = await fetch(apiUrl.toString());
+  if (!response.ok) {
+    throw new Error(`YouTube videos.list failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  for (const row of data?.items ?? []) {
+    const id = row?.id;
+    if (!id) continue;
+
+    const viewRaw = row?.statistics?.viewCount;
+    const viewCount =
+      typeof viewRaw === "string" ? parseInt(viewRaw, 10) : Number(viewRaw) || 0;
+
+    const durationRaw = row?.contentDetails?.duration;
+    const durationSeconds =
+      typeof durationRaw === "string" ? parseIso8601DurationSeconds(durationRaw) : null;
+
+    details.set(id, { viewCount, durationSeconds });
+  }
+
+  return details;
+}
+
 async function fetchYouTubeFeedViaApi(
   channelId: string,
   channelName: string,
@@ -286,15 +373,39 @@ async function fetchYouTubeFeedViaApi(
   }
 
   const data = await response.json();
-  const items: FeedItem[] = [];
+  type PlaylistRow = {
+    videoId: string;
+    snippet: {
+      publishedAt: string;
+      channelTitle?: string;
+      title?: string;
+      thumbnails?: { medium?: { url?: string }; default?: { url?: string } };
+    };
+  };
 
+  const playlistRows: PlaylistRow[] = [];
   for (const row of data?.items ?? []) {
     const videoId = row?.contentDetails?.videoId;
     const snippet = row?.snippet;
     if (!videoId || !snippet?.publishedAt) continue;
+    playlistRows.push({ videoId, snippet });
+  }
+
+  const videoDetails = await fetchYouTubeVideoDetails(
+    playlistRows.map((r) => r.videoId),
+    apiKey
+  );
+
+  const items: FeedItem[] = [];
+
+  for (const { videoId, snippet } of playlistRows) {
+    const meta = videoDetails.get(videoId);
+    const durationSeconds = meta?.durationSeconds ?? null;
+    if (durationSeconds !== null && durationSeconds <= YOUTUBE_SHORT_MAX_SECONDS) {
+      continue;
+    }
 
     const url = `https://www.youtube.com/watch?v=${videoId}`;
-    if (url.includes("/shorts/")) continue;
 
     items.push({
       source: "youtube",
@@ -308,11 +419,22 @@ async function fetchYouTubeFeedViaApi(
         snippet.thumbnails?.default?.url ??
         `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       published_at: snippet.publishedAt,
-      engagement_score: 0,
+      engagement_score: meta?.viewCount ?? 0,
     });
   }
 
   return items;
+}
+
+function mergeEngagementScoreForUpsert(
+  incoming: number | undefined,
+  existing: number | null | undefined
+): number {
+  const next = incoming ?? 0;
+  const prev = existing ?? 0;
+  if (next > 0) return next;
+  if (prev > 0) return prev;
+  return next;
 }
 
 async function fetchYouTubeChannelItems(
@@ -1527,10 +1649,13 @@ Deno.serve(async (req) => {
       const urls = dedupedItems.map((item) => item.url);
       const { data: existingItems } = await supabase
         .from("feed_items")
-        .select("url")
+        .select("url, engagement_score")
         .in("url", urls);
 
-      const existingUrls = new Set((existingItems || []).map((i) => i.url));
+      const existingByUrl = new Map(
+        (existingItems || []).map((i) => [i.url, i.engagement_score as number | null])
+      );
+      const existingUrls = new Set(existingByUrl.keys());
       const trulyNewCount = dedupedItems.filter((item) => !existingUrls.has(item.url)).length;
 
       const { error: upsertError } = await supabase.from("feed_items").upsert(
@@ -1543,7 +1668,10 @@ Deno.serve(async (req) => {
           url: item.url,
           thumbnail: item.thumbnail,
           published_at: item.published_at,
-          engagement_score: item.engagement_score,
+          engagement_score: mergeEngagementScoreForUpsert(
+            item.engagement_score,
+            existingByUrl.get(item.url)
+          ),
         })),
         { onConflict: "url", ignoreDuplicates: false }
       );
