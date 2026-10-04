@@ -14,7 +14,13 @@ import { trackSignup } from '../lib/analytics'
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
-export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boolean }) {
+export function SignupBox({
+  compactOnMobile = false,
+  sidebar = false,
+}: {
+  compactOnMobile?: boolean
+  sidebar?: boolean
+}) {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ProfessionalRole | ''>(() => getSignupRolePreference() ?? '')
   const [honeypot, setHoneypot] = useState('')
@@ -75,11 +81,15 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
     }
   }
 
+  const shellClass = sidebar
+    ? 'story-panel story-mini-signup'
+    : `bg-paper border border-border rounded-[12px] shadow-[var(--shadow-signup)] ${compactOnMobile ? 'p-3 max-sm:p-3 sm:p-6' : 'p-6'}`
+
   if (isSuccess) {
     return (
       <aside
         id="digest"
-        className={`bg-paper border border-border rounded-[12px] shadow-[var(--shadow-signup)] ${compactOnMobile ? 'p-3 max-sm:p-3 sm:p-6' : 'p-6'}`}
+        className={shellClass}
       >
         <div className="flex items-start gap-3 text-signal">
           <CheckCircle className="w-5 h-5 mt-0.5 shrink-0" />
@@ -95,30 +105,44 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
     <aside
       id="digest"
       aria-labelledby="digest-title"
-      className={`bg-paper border border-border rounded-[12px] shadow-[var(--shadow-signup)] ${compactOnMobile ? 'p-3 max-sm:p-3 sm:p-6' : 'p-6'}`}
+      className={shellClass}
     >
-      <div className={`${compactOnMobile ? 'max-sm:mb-2 sm:mb-4' : 'mb-4'} flex items-center gap-3`}>
-        <div className={`${compactOnMobile ? 'max-sm:hidden' : ''} w-10 h-10 rounded-lg bg-signal-soft text-signal grid place-items-center`}>
-          <Mail className="w-5 h-5" />
+      {!sidebar && (
+        <div className={`${compactOnMobile ? 'max-sm:mb-2 sm:mb-4' : 'mb-4'} flex items-center gap-3`}>
+          <div className={`${compactOnMobile ? 'max-sm:hidden' : ''} w-10 h-10 rounded-lg bg-signal-soft text-signal grid place-items-center`}>
+            <Mail className="w-5 h-5" />
+          </div>
+          <h2
+            id="digest-title"
+            className={`font-semibold text-ink ${compactOnMobile ? 'text-[15px] max-sm:text-[14px] sm:text-[17px]' : 'text-[17px]'}`}
+          >
+            Get the morning AI digest
+          </h2>
         </div>
-        <h2
-          id="digest-title"
-          className={`font-semibold text-ink ${compactOnMobile ? 'text-[15px] max-sm:text-[14px] sm:text-[17px]' : 'text-[17px]'}`}
-        >
+      )}
+
+      {sidebar && (
+        <h2 id="digest-title" className="story-mini-signup-title">
           Get the morning AI digest
         </h2>
-      </div>
+      )}
 
       <p
-        className={`text-stone ${
-          compactOnMobile
-            ? 'text-[13px] max-sm:mb-2 max-sm:line-clamp-1 sm:text-[14px] sm:leading-relaxed sm:mb-5'
-            : 'text-[14px] leading-relaxed mb-5'
-        }`}
+        className={
+          sidebar
+            ? 'story-mini-signup-lede'
+            : `text-stone ${
+                compactOnMobile
+                  ? 'text-[13px] max-sm:mb-2 max-sm:line-clamp-1 sm:text-[14px] sm:leading-relaxed sm:mb-5'
+                  : 'text-[14px] leading-relaxed mb-5'
+              }`
+        }
       >
-        {compactOnMobile
-          ? 'AI stories worth knowing — join for the first digest.'
-          : 'The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.'}
+        {sidebar
+          ? 'The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.'
+          : compactOnMobile
+            ? 'AI stories worth knowing — join for the first digest.'
+            : 'The few AI stories worth knowing, explained without jargon. Launching soon, so join the list to get the first one.'}
       </p>
 
       <form onSubmit={handleSubmit}>
@@ -134,8 +158,16 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
         />
 
         <label className="sr-only" htmlFor="email">Work email</label>
-        <div className="flex flex-col gap-2">
-          <div className={`flex gap-2 ${compactOnMobile ? 'max-sm:flex-row max-sm:items-center' : 'max-sm:flex-col'}`}>
+        <div className={`flex flex-col gap-2 ${sidebar ? 'story-mini-signup-form' : ''}`}>
+          <div
+            className={`flex gap-2 ${
+              sidebar
+                ? 'flex-col'
+                : compactOnMobile
+                  ? 'max-sm:flex-row max-sm:items-center'
+                  : 'max-sm:flex-col'
+            }`}
+          >
             <input
               id="email"
               type="email"
@@ -150,15 +182,15 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`btn-primary whitespace-nowrap ${compactOnMobile ? 'max-sm:py-2 max-sm:px-3 max-sm:text-[14px]' : 'max-sm:w-full'}`}
+              className={`btn-primary whitespace-nowrap ${sidebar ? 'w-full' : compactOnMobile ? 'max-sm:py-2 max-sm:px-3 max-sm:text-[14px]' : 'max-sm:w-full'}`}
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className={compactOnMobile ? 'max-sm:hidden' : ''}>Joining...</span>
+                  <span className={compactOnMobile && !sidebar ? 'max-sm:hidden' : ''}>Joining...</span>
                 </span>
               ) : (
-                'Join'
+                sidebar ? 'Join the list' : 'Join'
               )}
             </button>
           </div>
@@ -188,7 +220,7 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
               )}
             </div>
           ) : null}
-          <div className={compactOnMobile ? 'hidden sm:block' : ''}>
+          <div className={sidebar || compactOnMobile ? 'hidden sm:block' : ''}>
             <ChipSelect
               id="signup-role"
               value={role}

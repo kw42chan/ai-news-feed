@@ -14,16 +14,20 @@ export function feedCardDisplayTitle(item: FeedItem): string {
   return h || item.title
 }
 
+export function storyPageHeading(item: FeedItem): string {
+  const h = item.headline?.trim()
+  return h || item.title
+}
+
 export function storyPageTitles(
   item: FeedItem,
   isMergedGroup: boolean
 ): { heading: string; youtubeTitle?: string } {
-  if (!isMergedGroup) {
-    return { heading: item.title }
-  }
-  const h = item.headline?.trim()
+  const heading = storyPageHeading(item)
+  const showYoutubeSubtitle =
+    isMergedGroup || (item.headline?.trim() && item.headline.trim() !== item.title)
   return {
-    heading: h || item.title,
-    youtubeTitle: item.title,
+    heading,
+    youtubeTitle: showYoutubeSubtitle ? item.title : undefined,
   }
 }

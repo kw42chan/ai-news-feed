@@ -9,6 +9,8 @@ interface StoryActionsProps {
   title: string
   summary: string | null
   compact?: boolean
+  /** Story page: labeled Share button + bookmark (toolbar row). */
+  toolbar?: boolean
   className?: string
   onBookmarkChange?: () => void
   /** When set, share-fallback UI is rendered by the parent (e.g. below card meta). */
@@ -20,6 +22,7 @@ export function StoryActions({
   title,
   summary,
   compact = false,
+  toolbar = false,
   className = '',
   onBookmarkChange,
   onShareFallbackUrl,
@@ -56,6 +59,40 @@ export function StoryActions({
       if (onShareFallbackUrl) onShareFallbackUrl(url)
       else setLocalFallbackUrl(url)
     }
+  }
+
+  if (toolbar) {
+    return (
+      <div className={className}>
+        <div className="flex items-center gap-2 shrink-0">
+          {shareHint && (
+            <span className="text-[12px] text-signal" role="status">{shareHint}</span>
+          )}
+          <button
+            type="button"
+            onClick={handleSave}
+            className="p-2 rounded-md text-meta hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal"
+            aria-pressed={saved}
+            aria-label={saved ? 'Remove bookmark' : 'Save story'}
+          >
+            {saved ? (
+              <Bookmark className="w-4 h-4 fill-signal text-signal" />
+            ) : (
+              <Bookmark className="w-4 h-4" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleShare}
+            className="btn-secondary btn-sm inline-flex items-center gap-2 h-9 px-4"
+          >
+            <Share2 className="w-4 h-4" aria-hidden="true" />
+            Share
+          </button>
+        </div>
+        {!onShareFallbackUrl && localFallbackUrl && <ShareFallbackBox url={localFallbackUrl} />}
+      </div>
+    )
   }
 
   return (

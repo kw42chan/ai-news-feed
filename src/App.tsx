@@ -42,7 +42,7 @@ function App() {
         )}
         {route.name === 'saved' && <SavedFeed />}
         {route.name === 'story' && (
-          <div className="max-w-[800px] mx-auto px-6 max-sm:px-4">
+          <div className="max-w-[1160px] mx-auto px-6 max-sm:px-5">
             <StoryPage id={route.id} />
           </div>
         )}
