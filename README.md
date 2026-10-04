@@ -206,6 +206,33 @@ curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
   -d '{"mode":"backfill_story_groups","limit":40}'
 ```
 
+**Re-run story grouping from scratch** (after tightening match rules; no new migration):
+
+```sql
+UPDATE public.feed_items
+SET story_group_id = NULL, is_story_lead = true, story_grouped_at = NULL
+WHERE source = 'youtube';
+```
+
+Or via ingest (`dry_run` reports how many rows would be reset):
+
+```bash
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_reset_story_groups","dry_run":true}'
+
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_reset_story_groups"}'
+```
+
+Then repeat step 4 (`backfill_story_groups`) until `remaining` is 0.
+
+**Post-bef6085 quality fixes:** redeploy **`ingest` only** (stricter story matching, root-lead chaining, `story_grouped_at` on ingest grouping, keyword prompt/filter, YouTube RSS→Data API fallback). Ensure `YOUTUBE_API_KEY` is in Vault (same key as `keyword-videos`).
+```
+
 **Darwin (Vercel):** enable Web Analytics in the project dashboard; custom `track()` events need Pro.
 
 ### 5. Test Ingestion

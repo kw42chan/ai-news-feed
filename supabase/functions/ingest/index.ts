@@ -187,6 +187,38 @@ function normalizeKeywords(raw: unknown): string[] {
   return result;
 }
 
+const MODEL_KEYWORD_PATTERN =
+  /^(chatgpt|gpt[\d.]*|claude|gemini|opus|sonnet|openai|anthropic|copilot|llama|deepseek|mistral)/i;
+
+function keywordAppearsInSource(keyword: string, title: string, description: string): boolean {
+  const hay = `${title}\n${description}`.toLowerCase();
+  const lower = keyword.toLowerCase().trim();
+  if (!lower) return false;
+  if (hay.includes(lower)) return true;
+
+  const parts = lower.split(/[\s/]+/).filter((p) => p.length > 1);
+  if (parts.length > 1 && parts.every((p) => hay.includes(p))) return true;
+
+  const alnumHay = hay.replace(/[^a-z0-9]/g, "");
+  const alnumKw = lower.replace(/[^a-z0-9]/g, "");
+  if (alnumKw.length >= 4 && alnumHay.includes(alnumKw)) return true;
+
+  if (MODEL_KEYWORD_PATTERN.test(keyword)) {
+    const head = lower.split(/[\s-]/)[0];
+    return hay.includes(head);
+  }
+
+  return hay.includes(parts[0] ?? lower);
+}
+
+function filterKeywordsToSource(
+  title: string,
+  description: string,
+  keywords: string[]
+): string[] {
+  return keywords.filter((kw) => keywordAppearsInSource(kw, title, description));
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-cron-secret, content-type",
@@ -227,6 +259,81 @@ async function getAppSecret(
     return null;
   }
   return data;
+}
+
+function channelIdToUploadsPlaylistId(channelId: string): string {
+  if (channelId.startsWith("UC") && channelId.length > 2) {
+    return `UU${channelId.slice(2)}`;
+  }
+  return channelId;
+}
+
+async function fetchYouTubeFeedViaApi(
+  channelId: string,
+  channelName: string,
+  apiKey: string
+): Promise<FeedItem[]> {
+  const playlistId = channelIdToUploadsPlaylistId(channelId);
+  const apiUrl = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+  apiUrl.searchParams.set("part", "snippet,contentDetails");
+  apiUrl.searchParams.set("playlistId", playlistId);
+  apiUrl.searchParams.set("maxResults", "15");
+  apiUrl.searchParams.set("key", apiKey);
+
+  const response = await fetch(apiUrl.toString());
+  if (!response.ok) {
+    throw new Error(`YouTube playlistItems failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const items: FeedItem[] = [];
+
+  for (const row of data?.items ?? []) {
+    const videoId = row?.contentDetails?.videoId;
+    const snippet = row?.snippet;
+    if (!videoId || !snippet?.publishedAt) continue;
+
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    if (url.includes("/shorts/")) continue;
+
+    items.push({
+      source: "youtube",
+      source_id: "",
+      source_name: channelName,
+      author: snippet.channelTitle ? decodeHtmlEntities(snippet.channelTitle) : channelName,
+      title: decodeHtmlEntities(snippet.title ?? "YouTube video"),
+      url,
+      thumbnail:
+        snippet.thumbnails?.medium?.url ??
+        snippet.thumbnails?.default?.url ??
+        `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      published_at: snippet.publishedAt,
+      engagement_score: 0,
+    });
+  }
+
+  return items;
+}
+
+async function fetchYouTubeChannelItems(
+  channelId: string,
+  channelName: string,
+  youtubeApiKey: string | null
+): Promise<{ items: FeedItem[]; fetchPath: "rss" | "api" }> {
+  try {
+    const items = await fetchYouTubeFeed(channelId);
+    return { items, fetchPath: "rss" };
+  } catch (rssError) {
+    if (!youtubeApiKey) {
+      throw rssError;
+    }
+    console.warn(
+      `YouTube RSS failed for ${channelId}, falling back to Data API:`,
+      String(rssError)
+    );
+    const items = await fetchYouTubeFeedViaApi(channelId, channelName, youtubeApiKey);
+    return { items, fetchPath: "api" };
+  }
 }
 
 async function fetchYouTubeFeed(channelId: string): Promise<FeedItem[]> {
@@ -519,7 +626,7 @@ Use BOTH the video title and any description/transcript below to write the one-l
 For the following content, provide:
 1. A ONE plain-English sentence (max 25 words) explaining "what this means for you" - no jargon, no hype, just practical impact
 2. 1-3 tags from this list: ${VALID_TAGS.join(", ")}
-3. 2-3 short keywords for trending topics (preserve product casing: "ChatGPT", "AI Agents", "GPT-4o") — concrete AI topics only, no generic words like "News"
+3. 2-3 short keywords for the specific topics in THIS video only — each must be clearly named or implied in the title/description above (do not invent model versions or copy generic examples). Concrete AI product/topic names only; no generic words like "News"
 4. 0-3 professional roles this story is most relevant to, from exactly this list: ${PROFESSIONAL_ROLES.join(", ")}
 5. If this is a how-to or tutorial video, one concrete "try this" action someone can do in about 2 minutes (e.g. "Open ChatGPT and ask it to…"). Otherwise null.
 6. 3-5 short plain-English bullet points (key_points): what the video covers and why it matters for work. Each bullet one sentence, no jargon.
@@ -567,7 +674,11 @@ Respond in JSON only:
       VALID_TAGS.includes(t as (typeof VALID_TAGS)[number])
     );
 
-    const keywords = normalizeKeywords(parsed.keywords);
+    const keywords = filterKeywordsToSource(
+      title,
+      extraContext,
+      normalizeKeywords(parsed.keywords)
+    );
     const roles = normalizeRoles(parsed.roles);
     const tryThis =
       typeof parsed.try_this === "string" && parsed.try_this.trim()
@@ -622,6 +733,7 @@ interface StoryLeadCandidate {
   id: string;
   title: string;
   summary: string;
+  key_points: string[] | null;
 }
 
 async function fetchStoryLeadsNearPublishedAt(
@@ -636,7 +748,7 @@ async function fetchStoryLeadsNearPublishedAt(
 
   const { data, error } = await supabase
     .from("feed_items")
-    .select("id, title, summary")
+    .select("id, title, summary, key_points")
     .eq("is_story_lead", true)
     .eq("hidden", false)
     .eq("is_ai_related", true)
@@ -656,9 +768,66 @@ async function fetchStoryLeadsNearPublishedAt(
   );
 }
 
+function formatKeyPointsBlock(keyPoints: string[] | null | undefined): string {
+  if (!keyPoints?.length) return "(none)";
+  return keyPoints.map((p) => `- ${p}`).join("\n");
+}
+
+function formatStoryForMatch(
+  label: string,
+  title: string,
+  summary: string,
+  keyPoints: string[] | null | undefined
+): string {
+  return `${label}
+Title: ${title}
+Summary: ${summary}
+Key points:
+${formatKeyPointsBlock(keyPoints)}`;
+}
+
+async function resolveRootLeadId(
+  supabase: ReturnType<typeof createClient>,
+  itemId: string
+): Promise<string> {
+  let current = itemId;
+  for (let i = 0; i < 12; i++) {
+    const { data } = await supabase
+      .from("feed_items")
+      .select("id, story_group_id")
+      .eq("id", current)
+      .maybeSingle();
+
+    if (!data?.story_group_id || data.story_group_id === data.id) {
+      return current;
+    }
+    current = data.story_group_id;
+  }
+  return current;
+}
+
+async function repointSubtreeToRoot(
+  supabase: ReturnType<typeof createClient>,
+  oldLeadId: string,
+  rootId: string
+): Promise<void> {
+  if (oldLeadId === rootId) return;
+
+  await supabase
+    .from("feed_items")
+    .update({ story_group_id: rootId, is_story_lead: false })
+    .eq("story_group_id", oldLeadId);
+
+  await supabase
+    .from("feed_items")
+    .update({ story_group_id: rootId, is_story_lead: false })
+    .eq("id", oldLeadId);
+}
+
 async function matchExistingStoryGroup(
   title: string,
   summary: string,
+  keyPoints: string[] | null | undefined,
   candidates: StoryLeadCandidate[],
   apiKey: string,
   model: string
@@ -666,18 +835,32 @@ async function matchExistingStoryGroup(
   if (candidates.length === 0) return null;
 
   const list = candidates
-    .map((c, i) => `${i + 1}. [${c.id}] ${c.title} — ${c.summary}`)
-    .join("\n");
+    .map(
+      (c, i) =>
+        `${i + 1}. [${c.id}]\n${formatStoryForMatch("Existing story", c.title, c.summary, c.key_points)}`
+    )
+    .join("\n\n");
 
-  const prompt = `Several YouTube channels may cover the same news story. Does this NEW video describe the same underlying story as any existing entry?
+  const prompt = `You decide if a NEW YouTube video belongs in the SAME news story group as an existing story.
 
-NEW video title: "${title}"
-NEW one-line summary: "${summary}"
+STRICT RULES — merge ONLY when both videos cover the SAME specific announcement, event, or product release (same product + same news moment). Default is NO MATCH.
 
-Existing stories (last 72 hours):
+NEVER merge when either video is:
+- a tutorial, how-to, tips list, "secrets", beginner guide, walkthrough, or opinion/reaction
+- a multi-topic news roundup covering different stories
+- only related by shared company or product name (e.g. both mention ChatGPT or Claude but different releases/features)
+- a general industry trend piece vs a specific launch
+
+NEW video:
+${formatStoryForMatch("NEW", title, summary, keyPoints)}
+
+Existing story candidates (published within ±72 hours of the new video):
 ${list}
 
-Reply JSON only: {"match_id": "<uuid from brackets>"} if it is the same news story, or {"match_id": null} if it is a distinct story. Same product launch, same policy change, or same model release = match. Different angle on unrelated topics = null.`;
+Reply JSON only:
+{"match_id": "<uuid from brackets>" | null, "confidence": "high" | "low", "reason": "one short sentence"}
+
+Set match_id only when confidence is "high" and the reason cites the same specific announcement/event. Otherwise match_id must be null.`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -691,8 +874,8 @@ Reply JSON only: {"match_id": "<uuid from brackets>"} if it is the same news sto
       body: JSON.stringify({
         model,
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.1,
-        max_tokens: 120,
+        temperature: 0.05,
+        max_tokens: 200,
       }),
     });
 
@@ -705,7 +888,12 @@ Reply JSON only: {"match_id": "<uuid from brackets>"} if it is the same news sto
 
     const parsed = JSON.parse(jsonMatch[0]);
     const matchId = parsed.match_id;
-    if (typeof matchId !== "string" || !matchId) return null;
+    const confidence =
+      typeof parsed.confidence === "string" ? parsed.confidence.toLowerCase() : "low";
+
+    if (confidence !== "high" || typeof matchId !== "string" || !matchId) {
+      return null;
+    }
 
     const valid = candidates.some((c) => c.id === matchId);
     return valid ? matchId : null;
@@ -759,7 +947,13 @@ async function reelectStoryGroupLead(
 
 async function assignStoryGroupForItem(
   supabase: ReturnType<typeof createClient>,
-  item: { id: string; title: string; summary: string; published_at: string },
+  item: {
+    id: string;
+    title: string;
+    summary: string;
+    published_at: string;
+    key_points?: string[] | null;
+  },
   apiKey: string,
   model: string
 ): Promise<void> {
@@ -771,25 +965,41 @@ async function assignStoryGroupForItem(
   const matchId = await matchExistingStoryGroup(
     item.title,
     item.summary,
+    item.key_points ?? null,
     candidates,
     apiKey,
     model
   );
 
+  const groupedAt = new Date().toISOString();
+
   if (!matchId) {
     await supabase
       .from("feed_items")
-      .update({ story_group_id: null, is_story_lead: true })
+      .update({
+        story_group_id: null,
+        is_story_lead: true,
+        story_grouped_at: groupedAt,
+      })
       .eq("id", item.id);
     return;
   }
 
+  const rootId = await resolveRootLeadId(supabase, matchId);
+
+  await repointSubtreeToRoot(supabase, matchId, rootId);
+  await repointSubtreeToRoot(supabase, item.id, rootId);
+
   await supabase
     .from("feed_items")
-    .update({ story_group_id: matchId, is_story_lead: false })
+    .update({
+      story_group_id: rootId,
+      is_story_lead: false,
+      story_grouped_at: groupedAt,
+    })
     .eq("id", item.id);
 
-  await reelectStoryGroupLead(supabase, matchId);
+  await reelectStoryGroupLead(supabase, rootId);
 }
 
 function enrichmentPatchFromResult(
@@ -1148,6 +1358,42 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (requestBody.mode === "backfill_reset_story_groups") {
+      const dryRun = requestBody.dry_run === true;
+
+      const { count: toReset, error: countError } = await supabase
+        .from("feed_items")
+        .select("id", { count: "exact", head: true })
+        .eq("source", "youtube");
+
+      if (countError) throw countError;
+
+      if (!dryRun) {
+        const { error: resetError } = await supabase
+          .from("feed_items")
+          .update({
+            story_group_id: null,
+            is_story_lead: true,
+            story_grouped_at: null,
+          })
+          .eq("source", "youtube");
+
+        if (resetError) throw resetError;
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "backfill_reset_story_groups",
+          dry_run: dryRun,
+          itemsReset: dryRun ? 0 : (toReset ?? 0),
+          wouldReset: toReset ?? 0,
+          durationMs: Date.now() - startTime,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (requestBody.mode === "backfill_story_groups") {
       if (!openRouterKey) {
         return new Response(
@@ -1158,7 +1404,7 @@ Deno.serve(async (req) => {
 
       const { data: candidates, error: candidatesError } = await supabase
         .from("feed_items")
-        .select("id, title, summary, published_at")
+        .select("id, title, summary, published_at, key_points")
         .eq("hidden", false)
         .eq("is_ai_related", true)
         .not("summary", "is", null)
@@ -1179,14 +1425,11 @@ Deno.serve(async (req) => {
             title: item.title,
             summary: item.summary,
             published_at: item.published_at,
+            key_points: item.key_points,
           },
           openRouterKey,
           openRouterModel
         );
-        await supabase
-          .from("feed_items")
-          .update({ story_grouped_at: new Date().toISOString() })
-          .eq("id", item.id);
         itemsGrouped++;
       }
 
@@ -1235,7 +1478,14 @@ Deno.serve(async (req) => {
         let sourceError: string | undefined;
 
         if (source.kind === "youtube") {
-          items = await fetchYouTubeFeed(source.external_id);
+          const { items: ytItems, fetchPath } = await fetchYouTubeChannelItems(
+            source.external_id,
+            source.name,
+            youtubeApiKey
+          );
+          items = ytItems;
+          sourceDetails.fetchPath = fetchPath;
+          console.log(`YouTube ${source.name} (${source.external_id}): ${fetchPath}, ${items.length} items`);
         } else if (source.kind === "reddit") {
           const result = await fetchRedditFeed(source.external_id, redditOAuthToken);
           items = result.items;
@@ -1320,6 +1570,7 @@ Deno.serve(async (req) => {
           title: string;
           summary: string;
           published_at: string;
+          key_points: string[] | null;
         }> = [];
 
         for (let i = 0; i < unsummarized.length; i += SUMMARY_CONCURRENCY) {
@@ -1358,6 +1609,8 @@ Deno.serve(async (req) => {
                     title: item.title,
                     summary: result.summary,
                     published_at: item.published_at,
+                    key_points:
+                      result.key_points.length > 0 ? result.key_points : null,
                   });
                 }
 
