@@ -176,23 +176,30 @@ Apply migration `20261003000012_keyword_video_daily_quota.sql` before deploying 
 2. `20261004000002_feed_items_is_ai_related.sql`
 3. `20261004000003_subscribers_attribution.sql`
 4. `20261004000004_feed_story_leads_view.sql`
+5. `20261004000005_feed_items_backfill_markers.sql`
 
-Then redeploy **`ingest`** and **`weekly-recap`**. Backfills (POST + `x-cron-secret`):
+Then redeploy **`ingest`** and **`weekly-recap`**. Backfills (POST + `x-cron-secret`; repeat each until `remaining` is 0):
 
 ```bash
-# Dry-run non-AI classification (returns sample_titles + non_ai_count)
+# 1) Dry-run AI classification (optional; does not write markers)
 curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
   -H "x-cron-secret: $INGEST_CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"mode":"backfill_ai_related","dry_run":true,"limit":40}'
 
-# Regenerate one-line summaries from title + description
+# 2) Classify + regenerate summaries/keywords (sets ai_classified_at + summary_regenerated_at; hides non-AI)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_ai_related","limit":40}'
+
+# 3) Optional: summary-only regen for rows not touched by step 2 (usually skip if step 2 completed)
 curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
   -H "x-cron-secret: $INGEST_CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"mode":"backfill_summaries","limit":40}'
 
-# Merge duplicate coverage (14-day window, chronological)
+# 4) Story grouping (±72h window per item; incremental via story_grouped_at)
 curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
   -H "x-cron-secret: $INGEST_CRON_SECRET" \
   -H "Content-Type: application/json" \

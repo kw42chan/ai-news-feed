@@ -128,7 +128,68 @@ async function runFeedQueryOnTable(
   }
 }
 
+function isSavedItemVisible(item: FeedItem): boolean {
+  return (
+    item.source === 'youtube' &&
+    item.summary != null &&
+    !item.hidden &&
+    item.is_ai_related !== false
+  )
+}
+
+async function fetchSavedFeedItems(savedIds: string[]): Promise<FeedResponse> {
+  const { data, error } = await supabase.from('feed_items').select('*').in('id', savedIds)
+
+  if (error) {
+    throw new Error(`Failed to fetch saved stories: ${error.message}`)
+  }
+
+  const byId = new Map<string, FeedItem>()
+  for (const row of data ?? []) {
+    byId.set(row.id, row as FeedItem)
+  }
+
+  const leadIds = new Set<string>()
+  for (const id of savedIds) {
+    const item = byId.get(id)
+    if (!item || isSavedItemVisible(item)) continue
+    if (item.story_group_id) leadIds.add(item.story_group_id)
+  }
+
+  let leadsById = new Map<string, FeedItem>()
+  if (leadIds.size > 0) {
+    const { data: leads } = await supabase.from('feed_items').select('*').in('id', [...leadIds])
+    leadsById = new Map((leads ?? []).map((row) => [row.id, row as FeedItem]))
+  }
+
+  const items: FeedItem[] = []
+  const seen = new Set<string>()
+
+  for (const id of savedIds) {
+    const item = byId.get(id)
+    if (!item || item.source !== 'youtube') continue
+
+    let display = item
+    if (!isSavedItemVisible(item) && item.story_group_id) {
+      const lead = leadsById.get(item.story_group_id)
+      if (lead && isSavedItemVisible(lead)) {
+        display = lead
+      }
+    }
+
+    if (seen.has(display.id)) continue
+    seen.add(display.id)
+    items.push(display)
+  }
+
+  return { items, nextCursor: null, hasMore: false }
+}
+
 async function runFeedQuery(options: FetchFeedOptions): Promise<FeedResponse> {
+  if (options.savedIds && options.savedIds.length > 0) {
+    return fetchSavedFeedItems(options.savedIds)
+  }
+
   try {
     return await runFeedQueryOnTable(FEED_LEADS_TABLE, options, true)
   } catch (err) {

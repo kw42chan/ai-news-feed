@@ -624,11 +624,16 @@ interface StoryLeadCandidate {
   summary: string;
 }
 
-async function fetchRecentStoryLeads(
+async function fetchStoryLeadsNearPublishedAt(
   supabase: ReturnType<typeof createClient>,
-  hours = 72
+  publishedAt: string,
+  excludeId?: string
 ): Promise<StoryLeadCandidate[]> {
-  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const center = new Date(publishedAt).getTime();
+  const windowMs = 72 * 60 * 60 * 1000;
+  const since = new Date(center - windowMs).toISOString();
+  const until = new Date(center + windowMs).toISOString();
+
   const { data, error } = await supabase
     .from("feed_items")
     .select("id, title, summary")
@@ -637,15 +642,17 @@ async function fetchRecentStoryLeads(
     .eq("is_ai_related", true)
     .not("summary", "is", null)
     .gte("published_at", since)
+    .lte("published_at", until)
     .order("published_at", { ascending: false })
-    .limit(35);
+    .limit(40);
 
   if (error || !data) return [];
   return data.filter(
     (row): row is StoryLeadCandidate =>
       typeof row.id === "string" &&
       typeof row.title === "string" &&
-      typeof row.summary === "string"
+      typeof row.summary === "string" &&
+      row.id !== excludeId
   );
 }
 
@@ -713,12 +720,24 @@ async function reelectStoryGroupLead(
 ): Promise<void> {
   const { data: members, error } = await supabase
     .from("feed_items")
-    .select("id, engagement_score, published_at, story_group_id")
+    .select("id, engagement_score, published_at, story_group_id, hidden, is_ai_related")
     .or(`id.eq.${groupKey},story_group_id.eq.${groupKey}`);
 
   if (error || !members || members.length === 0) return;
 
-  const sorted = [...members].sort((a, b) => {
+  const eligible = members.filter((m) => m.hidden === false && m.is_ai_related === true);
+
+  if (eligible.length === 0) {
+    for (const member of members) {
+      await supabase
+        .from("feed_items")
+        .update({ is_story_lead: false })
+        .eq("id", member.id);
+    }
+    return;
+  }
+
+  const sorted = [...eligible].sort((a, b) => {
     const scoreDiff = (b.engagement_score ?? 0) - (a.engagement_score ?? 0);
     if (scoreDiff !== 0) return scoreDiff;
     return new Date(a.published_at).getTime() - new Date(b.published_at).getTime();
@@ -740,11 +759,15 @@ async function reelectStoryGroupLead(
 
 async function assignStoryGroupForItem(
   supabase: ReturnType<typeof createClient>,
-  item: { id: string; title: string; summary: string },
+  item: { id: string; title: string; summary: string; published_at: string },
   apiKey: string,
   model: string
 ): Promise<void> {
-  const candidates = (await fetchRecentStoryLeads(supabase)).filter((c) => c.id !== item.id);
+  const candidates = await fetchStoryLeadsNearPublishedAt(
+    supabase,
+    item.published_at,
+    item.id
+  );
   const matchId = await matchExistingStoryGroup(
     item.title,
     item.summary,
@@ -771,9 +794,13 @@ async function assignStoryGroupForItem(
 
 function enrichmentPatchFromResult(
   result: SummaryResponse,
-  openRouterModel: string
+  openRouterModel: string,
+  options?: { setAiClassifiedAt?: boolean; setSummaryRegeneratedAt?: boolean }
 ): Record<string, unknown> {
-  return {
+  const now = new Date().toISOString();
+  const hidden = !result.is_ai_related || result.relevant === false;
+
+  const patch: Record<string, unknown> = {
     summary: result.summary,
     tags: result.tags,
     keywords: result.keywords,
@@ -781,11 +808,20 @@ function enrichmentPatchFromResult(
     try_this: result.try_this,
     key_points: result.key_points.length > 0 ? result.key_points : null,
     is_ai_related: result.is_ai_related,
-    hidden: false,
+    hidden,
     summary_model: openRouterModel,
-    summarized_at: new Date().toISOString(),
-    enriched_at: new Date().toISOString(),
+    summarized_at: now,
+    enriched_at: now,
   };
+
+  if (options?.setAiClassifiedAt) {
+    patch.ai_classified_at = now;
+  }
+  if (options?.setSummaryRegeneratedAt) {
+    patch.summary_regenerated_at = now;
+  }
+
+  return patch;
 }
 
 Deno.serve(async (req) => {
@@ -833,7 +869,11 @@ Deno.serve(async (req) => {
       const rawBody = await req.text();
       if (rawBody) {
         try {
-          requestBody = JSON.parse(rawBody) as { mode?: string };
+          requestBody = JSON.parse(rawBody) as {
+            mode?: string;
+            dry_run?: boolean;
+            limit?: number;
+          };
         } catch {
           requestBody = {};
         }
@@ -963,10 +1003,11 @@ Deno.serve(async (req) => {
       const { data: candidates, error: candidatesError } = await supabase
         .from("feed_items")
         .select("id, title, source_name, url")
-        .eq("hidden", false)
         .not("summary", "is", null)
         .eq("source", "youtube")
-        .order("published_at", { ascending: false })
+        .is("summary_regenerated_at", null)
+        .is("ai_classified_at", null)
+        .order("published_at", { ascending: true })
         .limit(backfillLimit);
 
       if (candidatesError) throw candidatesError;
@@ -987,7 +1028,11 @@ Deno.serve(async (req) => {
 
           await supabase
             .from("feed_items")
-            .update(enrichmentPatchFromResult(result, openRouterModel))
+            .update(
+              enrichmentPatchFromResult(result, openRouterModel, {
+                setSummaryRegeneratedAt: true,
+              })
+            )
             .eq("id", item.id);
 
           if (result.is_ai_related && result.keywords.length > 0) {
@@ -1004,11 +1049,21 @@ Deno.serve(async (req) => {
         SUMMARY_CONCURRENCY
       );
 
+      const { count: remaining } = await supabase
+        .from("feed_items")
+        .select("id", { count: "exact", head: true })
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .is("summary_regenerated_at", null)
+        .is("ai_classified_at", null);
+
       return new Response(
         JSON.stringify({
           success: true,
           mode: "backfill_summaries",
           itemsUpdated,
+          remaining: remaining ?? 0,
+          note: "Skip if you run backfill_ai_related first (it sets both markers).",
           durationMs: Date.now() - startTime,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1027,10 +1082,10 @@ Deno.serve(async (req) => {
       const { data: candidates, error: candidatesError } = await supabase
         .from("feed_items")
         .select("id, title, source_name, url, is_ai_related")
-        .eq("hidden", false)
         .not("summary", "is", null)
         .eq("source", "youtube")
-        .order("published_at", { ascending: false })
+        .is("ai_classified_at", null)
+        .order("published_at", { ascending: true })
         .limit(backfillLimit);
 
       if (candidatesError) throw candidatesError;
@@ -1051,20 +1106,32 @@ Deno.serve(async (req) => {
           );
           if (!result) return;
 
-          if (!result.is_ai_related) {
+          if (!result.is_ai_related || result.relevant === false) {
             wouldFilter.push({ id: item.id, title: item.title });
           }
 
           if (!dryRun) {
             await supabase
               .from("feed_items")
-              .update(enrichmentPatchFromResult(result, openRouterModel))
+              .update(
+                enrichmentPatchFromResult(result, openRouterModel, {
+                  setAiClassifiedAt: true,
+                  setSummaryRegeneratedAt: true,
+                })
+              )
               .eq("id", item.id);
             itemsUpdated++;
           }
         },
         SUMMARY_CONCURRENCY
       );
+
+      const { count: remaining } = await supabase
+        .from("feed_items")
+        .select("id", { count: "exact", head: true })
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .is("ai_classified_at", null);
 
       return new Response(
         JSON.stringify({
@@ -1074,6 +1141,7 @@ Deno.serve(async (req) => {
           non_ai_count: wouldFilter.length,
           sample_titles: wouldFilter.slice(0, 15).map((r) => r.title),
           itemsUpdated: dryRun ? 0 : itemsUpdated,
+          remaining: remaining ?? 0,
           durationMs: Date.now() - startTime,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1088,49 +1156,55 @@ Deno.serve(async (req) => {
         );
       }
 
-      const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
       const { data: candidates, error: candidatesError } = await supabase
         .from("feed_items")
-        .select("id, title, summary")
+        .select("id, title, summary, published_at")
         .eq("hidden", false)
         .eq("is_ai_related", true)
         .not("summary", "is", null)
         .eq("source", "youtube")
-        .gte("published_at", since)
+        .is("story_grouped_at", null)
         .order("published_at", { ascending: true })
         .limit(backfillLimit);
 
       if (candidatesError) throw candidatesError;
 
-      await supabase
-        .from("feed_items")
-        .update({ story_group_id: null, is_story_lead: true })
-        .gte("published_at", since)
-        .eq("source", "youtube")
-        .eq("hidden", false);
-
       let itemsGrouped = 0;
       for (const item of candidates || []) {
-        if (!item.summary) continue;
-        await assignStoryGroupForItem(supabase, item, openRouterKey, openRouterModel);
+        if (!item.summary || !item.published_at) continue;
+        await assignStoryGroupForItem(
+          supabase,
+          {
+            id: item.id,
+            title: item.title,
+            summary: item.summary,
+            published_at: item.published_at,
+          },
+          openRouterKey,
+          openRouterModel
+        );
+        await supabase
+          .from("feed_items")
+          .update({ story_grouped_at: new Date().toISOString() })
+          .eq("id", item.id);
         itemsGrouped++;
       }
 
-      const { data: groupStats } = await supabase
+      const { count: remaining } = await supabase
         .from("feed_items")
-        .select("story_group_id")
+        .select("id", { count: "exact", head: true })
+        .eq("hidden", false)
         .eq("is_ai_related", true)
-        .gte("published_at", since)
-        .not("story_group_id", "is", null);
-
-      const mergedGroups = new Set((groupStats || []).map((r) => r.story_group_id));
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .is("story_grouped_at", null);
 
       return new Response(
         JSON.stringify({
           success: true,
           mode: "backfill_story_groups",
           itemsProcessed: itemsGrouped,
-          merged_group_count: mergedGroups.size,
+          remaining: remaining ?? 0,
           durationMs: Date.now() - startTime,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1234,55 +1308,72 @@ Deno.serve(async (req) => {
     if (openRouterKey) {
       const { data: unsummarized } = await supabase
         .from("feed_items")
-        .select("id, title, source_name, url")
+        .select("id, title, source_name, url, published_at")
         .is("summary", null)
         .eq("hidden", false)
         .order("created_at", { ascending: false })
         .limit(MAX_SUMMARIES_PER_RUN);
 
       if (unsummarized && unsummarized.length > 0) {
-        await processSummariesInBatches(
-          unsummarized,
-          async (item) => {
-            const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
-            const result = await generateSummary(
-              item.title,
-              item.source_name,
-              openRouterKey,
-              openRouterModel,
-              context
-            );
+        const pendingGrouping: Array<{
+          id: string;
+          title: string;
+          summary: string;
+          published_at: string;
+        }> = [];
 
-            if (result && result.summary) {
-              await supabase
-                .from("feed_items")
-                .update(enrichmentPatchFromResult(result, openRouterModel))
-                .eq("id", item.id);
+        for (let i = 0; i < unsummarized.length; i += SUMMARY_CONCURRENCY) {
+          const batch = unsummarized.slice(i, i + SUMMARY_CONCURRENCY);
 
-              if (result.is_ai_related && result.keywords.length > 0) {
-                await ensureGlossaryTerms(
-                  supabase,
-                  result.keywords,
-                  openRouterKey,
-                  openRouterModel,
-                  glossaryBudget
-                );
+          await Promise.all(
+            batch.map(async (item) => {
+              const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
+              const result = await generateSummary(
+                item.title,
+                item.source_name,
+                openRouterKey,
+                openRouterModel,
+                context
+              );
+
+              if (result && result.summary) {
+                await supabase
+                  .from("feed_items")
+                  .update(enrichmentPatchFromResult(result, openRouterModel))
+                  .eq("id", item.id);
+
+                if (result.is_ai_related && result.keywords.length > 0) {
+                  await ensureGlossaryTerms(
+                    supabase,
+                    result.keywords,
+                    openRouterKey,
+                    openRouterModel,
+                    glossaryBudget
+                  );
+                }
+
+                if (result.is_ai_related && item.published_at) {
+                  pendingGrouping.push({
+                    id: item.id,
+                    title: item.title,
+                    summary: result.summary,
+                    published_at: item.published_at,
+                  });
+                }
+
+                itemsSummarized++;
               }
+            })
+          );
+        }
 
-              if (result.is_ai_related) {
-                await assignStoryGroupForItem(
-                  supabase,
-                  { id: item.id, title: item.title, summary: result.summary },
-                  openRouterKey,
-                  openRouterModel
-                );
-              }
-
-              itemsSummarized++;
-            }
-          },
-          SUMMARY_CONCURRENCY
+        pendingGrouping.sort(
+          (a, b) => new Date(a.published_at).getTime() - new Date(b.published_at).getTime()
         );
+
+        for (const item of pendingGrouping) {
+          await assignStoryGroupForItem(supabase, item, openRouterKey, openRouterModel);
+        }
       }
     } else {
       details.warning = "OPENROUTER_API_KEY not configured, skipping summaries";
