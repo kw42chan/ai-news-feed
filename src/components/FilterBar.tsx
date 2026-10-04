@@ -3,6 +3,7 @@ import { PROFESSIONAL_ROLES, type ProfessionalRole } from '../lib/roles'
 import { lookupGlossary } from '../lib/glossary'
 import type { GlossaryEntry } from '../lib/glossary'
 import { TextSelect } from './TextSelect'
+import { trackChipClick } from '../lib/analytics'
 
 interface FilterBarProps {
   sort: SortOption
@@ -89,7 +90,10 @@ export function FilterBar({
           <button
             key={keyword}
             type="button"
-            onClick={() => onKeywordSelect(keyword)}
+            onClick={() => {
+              trackChipClick(keyword)
+              onKeywordSelect(keyword)
+            }}
             aria-pressed={selectedKeyword === keyword}
             className={`chip ${selectedKeyword === keyword ? 'chip-active' : ''}`}
           >

@@ -7,6 +7,7 @@ import { SavedFeed } from './components/SavedFeed'
 import { StoryPage } from './components/StoryPage'
 import { fetchLatestWeeklyRecap } from './lib/feed'
 import { useAppRoute } from './lib/routing'
+import { Analytics } from '@vercel/analytics/react'
 
 function App() {
   const route = useAppRoute()
@@ -47,6 +48,7 @@ function App() {
         )}
       </div>
       <Footer hasWeeklyRecap={hasWeeklyRecap} />
+      <Analytics />
     </div>
   )
 }

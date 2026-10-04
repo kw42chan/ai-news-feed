@@ -35,6 +35,10 @@ export interface FeedItem {
   try_this: string | null
   key_points: string[] | null
   hidden: boolean
+  story_group_id: string | null
+  is_story_lead: boolean
+  is_ai_related: boolean
+  story_video_count?: number
   created_at: string
   updated_at: string
 }

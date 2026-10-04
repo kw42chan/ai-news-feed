@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import type { FeedItem } from '../types'
 import { navigateTo } from '../lib/routing'
+import { fetchStoryGroupVideos } from '../lib/feed'
+import { trackStoryOpen, trackYoutubeClick } from '../lib/analytics'
 import { ShareFallbackBox, StoryActions } from './StoryActions'
+import { StoryGroupVideos } from './StoryGroupVideos'
 
 interface FeedCardProps {
   item: FeedItem
@@ -87,9 +90,18 @@ function CardMetaRow({
 
 export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
   const thumbnail = item.thumbnail
+  const [groupVideos, setGroupVideos] = useState<FeedItem[] | null>(null)
+  const videoCount = item.story_video_count ?? 1
 
   const handleOpenStory = () => {
+    trackStoryOpen(item.id)
     navigateTo(`/story/${item.id}`)
+  }
+
+  const ensureGroupVideos = async () => {
+    if (groupVideos !== null || videoCount <= 1) return
+    const videos = await fetchStoryGroupVideos(item).catch(() => [])
+    setGroupVideos(videos)
   }
 
   return (
@@ -104,7 +116,12 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
 
           <div className="flex gap-2.5 items-start mb-2">
             {thumbnail && (
-              <a href={item.url} target="_blank" rel="noopener noreferrer">
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => trackYoutubeClick('feed_card_mobile', item.id)}
+              >
                 <CardThumbnail src={thumbnail} className="w-24 h-[54px]" />
               </a>
             )}
@@ -119,11 +136,26 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
           {item.engagement_score > 0 && (
             <p className="text-[12px] text-meta tabular-nums">{formatViews(item.engagement_score)}</p>
           )}
+          {videoCount > 1 && (
+            <StoryGroupVideos
+              leadId={item.id}
+              videos={groupVideos ?? [item]}
+              videoCount={videoCount}
+              variant="card"
+              onExpand={ensureGroupVideos}
+            />
+          )}
         </div>
 
         <div className="hidden sm:flex sm:gap-4">
           {thumbnail && (
-            <a href={item.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0"
+              onClick={() => trackYoutubeClick('feed_card_desktop', item.id)}
+            >
               <CardThumbnail src={thumbnail} className="w-[140px] h-[79px]" />
             </a>
           )}
@@ -142,6 +174,15 @@ export function FeedCard({ item, onBookmarkChange }: FeedCardProps) {
 
             {item.engagement_score > 0 && (
               <p className="text-[12px] text-meta tabular-nums mt-auto">{formatViews(item.engagement_score)}</p>
+            )}
+            {videoCount > 1 && (
+              <StoryGroupVideos
+                leadId={item.id}
+                videos={groupVideos ?? [item]}
+                videoCount={videoCount}
+                variant="card"
+                onExpand={ensureGroupVideos}
+              />
             )}
           </div>
         </div>

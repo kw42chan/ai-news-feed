@@ -116,6 +116,8 @@ Deno.serve(async (req) => {
       .from("feed_items")
       .select("id, title, summary, engagement_score, published_at, source, hidden")
       .eq("hidden", false)
+      .eq("is_ai_related", true)
+      .eq("is_story_lead", true)
       .eq("source", "youtube")
       .not("summary", "is", null)
       .gte("published_at", since)

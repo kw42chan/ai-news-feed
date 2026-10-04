@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchKeywordYoutubeVideos, type KeywordYoutubeVideo } from '../lib/keywordVideos'
+import { trackYoutubeClick } from '../lib/analytics'
 
 interface KeywordYoutubeSectionProps {
   keyword: string | null
@@ -80,6 +81,7 @@ export function KeywordYoutubeSection({ keyword }: KeywordYoutubeSectionProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="flex gap-2.5 items-start group min-w-0 max-sm:w-[15rem] max-sm:max-w-[15rem] max-sm:shrink-0 card p-2.5"
+              onClick={() => trackYoutubeClick('keyword_section', video.videoId)}
             >
               <img
                 src={video.thumbnail}

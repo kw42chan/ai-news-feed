@@ -9,6 +9,8 @@ import {
   type ProfessionalRole,
 } from '../lib/roles'
 import { isSchemaMismatchError } from '../lib/postgrest'
+import { getSignupAttribution } from '../lib/attribution'
+import { trackSignup } from '../lib/analytics'
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
@@ -40,22 +42,22 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
     setIsSubmitting(true)
 
     try {
-      const payload: { email: string; role?: string } = {
+      const attribution = getSignupAttribution()
+      const payload: Record<string, string | null | undefined> = {
         email: email.toLowerCase().trim(),
+        utm_source: attribution.utm_source,
+        utm_medium: attribution.utm_medium,
+        utm_campaign: attribution.utm_campaign,
+        referrer: attribution.referrer,
       }
       if (role) payload.role = role
 
-      let { error: insertError } = await supabase.from('subscribers').insert(payload)
+      let { error: insertError } = await supabase.from('subscribers').insert(payload as never)
 
-      if (
-        insertError &&
-        insertError.code !== '23505' &&
-        role &&
-        isSchemaMismatchError(insertError.message)
-      ) {
-        const retry = await supabase.from('subscribers').insert({
-          email: payload.email,
-        })
+      if (insertError && insertError.code !== '23505' && isSchemaMismatchError(insertError.message)) {
+        const slim: { email: string; role?: string } = { email: payload.email as string }
+        if (role) slim.role = role
+        const retry = await supabase.from('subscribers').insert(slim)
         insertError = retry.error
       }
 
@@ -64,6 +66,7 @@ export function SignupBox({ compactOnMobile = false }: { compactOnMobile?: boole
       }
 
       setSignupRolePreference(role || null)
+      trackSignup()
       setIsSuccess(true)
     } catch {
       setError('Something went wrong. Please try again.')

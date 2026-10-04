@@ -58,6 +58,7 @@ interface SummaryResponse {
   roles: string[];
   try_this: string | null;
   key_points: string[];
+  is_ai_related: boolean;
   relevant?: boolean;
 }
 
@@ -513,20 +514,22 @@ async function generateSummary(
 
   const prompt = `You are a helpful assistant summarizing AI news for non-technical professionals.
 
+Use BOTH the video title and any description/transcript below to write the one-line summary. State what happened clearly — do not hedge (avoid words like "possibly", "might", "may", "could").
+
 For the following content, provide:
 1. A ONE plain-English sentence (max 25 words) explaining "what this means for you" - no jargon, no hype, just practical impact
 2. 1-3 tags from this list: ${VALID_TAGS.join(", ")}
-3. 2-3 short normalized Title Case keywords for trending topics (e.g. "AI Agents", "MCP", "Gemini", "ChatGPT") — product names and concrete AI topics only, no generic words like "News"
+3. 2-3 short keywords for trending topics (preserve product casing: "ChatGPT", "AI Agents", "GPT-4o") — concrete AI topics only, no generic words like "News"
 4. 0-3 professional roles this story is most relevant to, from exactly this list: ${PROFESSIONAL_ROLES.join(", ")}
 5. If this is a how-to or tutorial video, one concrete "try this" action someone can do in about 2 minutes (e.g. "Open ChatGPT and ask it to…"). Otherwise null.
 6. 3-5 short plain-English bullet points (key_points): what the video covers and why it matters for work. Each bullet one sentence, no jargon.
-7. A relevance flag (true if it's actually about AI/tech for general audiences, false for memes/low-effort/irrelevant content)
+7. is_ai_related: true if the video is about AI products, models, policy, or meaningful AI at work; false for general Zoom/Excel/productivity tips with no AI angle, memes, or off-topic content
 
 Content Title: "${title}"
 Source: ${sourceName}${contextBlock}
 
 Respond in JSON only:
-{"summary": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "roles": ["..."], "try_this": "..." or null, "key_points": ["...", "..."], "relevant": true/false}`;
+{"summary": "...", "tags": ["...", "..."], "keywords": ["...", "..."], "roles": ["..."], "try_this": "..." or null, "key_points": ["...", "..."], "is_ai_related": true/false}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -573,6 +576,11 @@ Respond in JSON only:
 
     const keyPoints = normalizeKeyPoints(parsed.key_points);
 
+    const isAiRelated =
+      parsed.is_ai_related !== false &&
+      parsed.is_ai_related !== "false" &&
+      parsed.relevant !== false;
+
     return {
       summary: parsed.summary || null,
       tags: validTags.slice(0, 3),
@@ -580,6 +588,7 @@ Respond in JSON only:
       roles,
       try_this: tryThis,
       key_points: keyPoints,
+      is_ai_related: isAiRelated,
       relevant: parsed.relevant !== false,
     };
   } catch (error) {
@@ -607,6 +616,176 @@ function dedupeByUrl(items: FeedItem[]): FeedItem[] {
     }
   }
   return Array.from(seen.values());
+}
+
+interface StoryLeadCandidate {
+  id: string;
+  title: string;
+  summary: string;
+}
+
+async function fetchRecentStoryLeads(
+  supabase: ReturnType<typeof createClient>,
+  hours = 72
+): Promise<StoryLeadCandidate[]> {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("feed_items")
+    .select("id, title, summary")
+    .eq("is_story_lead", true)
+    .eq("hidden", false)
+    .eq("is_ai_related", true)
+    .not("summary", "is", null)
+    .gte("published_at", since)
+    .order("published_at", { ascending: false })
+    .limit(35);
+
+  if (error || !data) return [];
+  return data.filter(
+    (row): row is StoryLeadCandidate =>
+      typeof row.id === "string" &&
+      typeof row.title === "string" &&
+      typeof row.summary === "string"
+  );
+}
+
+async function matchExistingStoryGroup(
+  title: string,
+  summary: string,
+  candidates: StoryLeadCandidate[],
+  apiKey: string,
+  model: string
+): Promise<string | null> {
+  if (candidates.length === 0) return null;
+
+  const list = candidates
+    .map((c, i) => `${i + 1}. [${c.id}] ${c.title} — ${c.summary}`)
+    .join("\n");
+
+  const prompt = `Several YouTube channels may cover the same news story. Does this NEW video describe the same underlying story as any existing entry?
+
+NEW video title: "${title}"
+NEW one-line summary: "${summary}"
+
+Existing stories (last 72 hours):
+${list}
+
+Reply JSON only: {"match_id": "<uuid from brackets>"} if it is the same news story, or {"match_id": null} if it is a distinct story. Same product launch, same policy change, or same model release = match. Different angle on unrelated topics = null.`;
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ai-news-feed.vercel.app",
+        "X-Title": "AI News Feed",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+        max_tokens: 120,
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    const jsonMatch = content?.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const matchId = parsed.match_id;
+    if (typeof matchId !== "string" || !matchId) return null;
+
+    const valid = candidates.some((c) => c.id === matchId);
+    return valid ? matchId : null;
+  } catch {
+    return null;
+  }
+}
+
+async function reelectStoryGroupLead(
+  supabase: ReturnType<typeof createClient>,
+  groupKey: string
+): Promise<void> {
+  const { data: members, error } = await supabase
+    .from("feed_items")
+    .select("id, engagement_score, published_at, story_group_id")
+    .or(`id.eq.${groupKey},story_group_id.eq.${groupKey}`);
+
+  if (error || !members || members.length === 0) return;
+
+  const sorted = [...members].sort((a, b) => {
+    const scoreDiff = (b.engagement_score ?? 0) - (a.engagement_score ?? 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return new Date(a.published_at).getTime() - new Date(b.published_at).getTime();
+  });
+
+  const lead = sorted[0];
+  if (!lead?.id) return;
+
+  for (const member of members) {
+    await supabase
+      .from("feed_items")
+      .update({
+        story_group_id: lead.id,
+        is_story_lead: member.id === lead.id,
+      })
+      .eq("id", member.id);
+  }
+}
+
+async function assignStoryGroupForItem(
+  supabase: ReturnType<typeof createClient>,
+  item: { id: string; title: string; summary: string },
+  apiKey: string,
+  model: string
+): Promise<void> {
+  const candidates = (await fetchRecentStoryLeads(supabase)).filter((c) => c.id !== item.id);
+  const matchId = await matchExistingStoryGroup(
+    item.title,
+    item.summary,
+    candidates,
+    apiKey,
+    model
+  );
+
+  if (!matchId) {
+    await supabase
+      .from("feed_items")
+      .update({ story_group_id: null, is_story_lead: true })
+      .eq("id", item.id);
+    return;
+  }
+
+  await supabase
+    .from("feed_items")
+    .update({ story_group_id: matchId, is_story_lead: false })
+    .eq("id", item.id);
+
+  await reelectStoryGroupLead(supabase, matchId);
+}
+
+function enrichmentPatchFromResult(
+  result: SummaryResponse,
+  openRouterModel: string
+): Record<string, unknown> {
+  return {
+    summary: result.summary,
+    tags: result.tags,
+    keywords: result.keywords,
+    roles: result.roles,
+    try_this: result.try_this,
+    key_points: result.key_points.length > 0 ? result.key_points : null,
+    is_ai_related: result.is_ai_related,
+    hidden: false,
+    summary_model: openRouterModel,
+    summarized_at: new Date().toISOString(),
+    enriched_at: new Date().toISOString(),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -649,7 +828,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    let requestBody: { mode?: string } = {};
+    let requestBody: { mode?: string; dry_run?: boolean; limit?: number } = {};
     if (req.method === "POST") {
       const rawBody = await req.text();
       if (rawBody) {
@@ -765,6 +944,193 @@ Deno.serve(async (req) => {
           success: true,
           mode: "backfill_keywords",
           itemsEnriched,
+          durationMs: Date.now() - startTime,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const backfillLimit = Math.min(requestBody.limit ?? MAX_SUMMARIES_PER_RUN, MAX_SUMMARIES_PER_RUN);
+
+    if (requestBody.mode === "backfill_summaries") {
+      if (!openRouterKey) {
+        return new Response(
+          JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: candidates, error: candidatesError } = await supabase
+        .from("feed_items")
+        .select("id, title, source_name, url")
+        .eq("hidden", false)
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .order("published_at", { ascending: false })
+        .limit(backfillLimit);
+
+      if (candidatesError) throw candidatesError;
+
+      let itemsUpdated = 0;
+      await processSummariesInBatches(
+        candidates || [],
+        async (item) => {
+          const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
+          const result = await generateSummary(
+            item.title,
+            item.source_name,
+            openRouterKey,
+            openRouterModel,
+            context
+          );
+          if (!result?.summary) return;
+
+          await supabase
+            .from("feed_items")
+            .update(enrichmentPatchFromResult(result, openRouterModel))
+            .eq("id", item.id);
+
+          if (result.is_ai_related && result.keywords.length > 0) {
+            await ensureGlossaryTerms(
+              supabase,
+              result.keywords,
+              openRouterKey,
+              openRouterModel,
+              glossaryBudget
+            );
+          }
+          itemsUpdated++;
+        },
+        SUMMARY_CONCURRENCY
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "backfill_summaries",
+          itemsUpdated,
+          durationMs: Date.now() - startTime,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (requestBody.mode === "backfill_ai_related") {
+      if (!openRouterKey) {
+        return new Response(
+          JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const dryRun = requestBody.dry_run === true;
+      const { data: candidates, error: candidatesError } = await supabase
+        .from("feed_items")
+        .select("id, title, source_name, url, is_ai_related")
+        .eq("hidden", false)
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .order("published_at", { ascending: false })
+        .limit(backfillLimit);
+
+      if (candidatesError) throw candidatesError;
+
+      const wouldFilter: { id: string; title: string }[] = [];
+      let itemsUpdated = 0;
+
+      await processSummariesInBatches(
+        candidates || [],
+        async (item) => {
+          const context = await fetchYouTubeVideoContext(item.url, youtubeApiKey);
+          const result = await generateSummary(
+            item.title,
+            item.source_name,
+            openRouterKey,
+            openRouterModel,
+            context
+          );
+          if (!result) return;
+
+          if (!result.is_ai_related) {
+            wouldFilter.push({ id: item.id, title: item.title });
+          }
+
+          if (!dryRun) {
+            await supabase
+              .from("feed_items")
+              .update(enrichmentPatchFromResult(result, openRouterModel))
+              .eq("id", item.id);
+            itemsUpdated++;
+          }
+        },
+        SUMMARY_CONCURRENCY
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "backfill_ai_related",
+          dry_run: dryRun,
+          non_ai_count: wouldFilter.length,
+          sample_titles: wouldFilter.slice(0, 15).map((r) => r.title),
+          itemsUpdated: dryRun ? 0 : itemsUpdated,
+          durationMs: Date.now() - startTime,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (requestBody.mode === "backfill_story_groups") {
+      if (!openRouterKey) {
+        return new Response(
+          JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: candidates, error: candidatesError } = await supabase
+        .from("feed_items")
+        .select("id, title, summary")
+        .eq("hidden", false)
+        .eq("is_ai_related", true)
+        .not("summary", "is", null)
+        .eq("source", "youtube")
+        .gte("published_at", since)
+        .order("published_at", { ascending: true })
+        .limit(backfillLimit);
+
+      if (candidatesError) throw candidatesError;
+
+      await supabase
+        .from("feed_items")
+        .update({ story_group_id: null, is_story_lead: true })
+        .gte("published_at", since)
+        .eq("source", "youtube")
+        .eq("hidden", false);
+
+      let itemsGrouped = 0;
+      for (const item of candidates || []) {
+        if (!item.summary) continue;
+        await assignStoryGroupForItem(supabase, item, openRouterKey, openRouterModel);
+        itemsGrouped++;
+      }
+
+      const { data: groupStats } = await supabase
+        .from("feed_items")
+        .select("story_group_id")
+        .eq("is_ai_related", true)
+        .gte("published_at", since)
+        .not("story_group_id", "is", null);
+
+      const mergedGroups = new Set((groupStats || []).map((r) => r.story_group_id));
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "backfill_story_groups",
+          itemsProcessed: itemsGrouped,
+          merged_group_count: mergedGroups.size,
           durationMs: Date.now() - startTime,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -887,22 +1253,13 @@ Deno.serve(async (req) => {
               context
             );
 
-            if (result && result.relevant !== false) {
+            if (result && result.summary) {
               await supabase
                 .from("feed_items")
-                .update({
-                  summary: result.summary,
-                  tags: result.tags,
-                  keywords: result.keywords,
-                  roles: result.roles,
-                  try_this: result.try_this,
-                  key_points: result.key_points.length > 0 ? result.key_points : null,
-                  summary_model: openRouterModel,
-                  summarized_at: new Date().toISOString(),
-                  enriched_at: new Date().toISOString(),
-                })
+                .update(enrichmentPatchFromResult(result, openRouterModel))
                 .eq("id", item.id);
-              if (result.keywords.length > 0) {
+
+              if (result.is_ai_related && result.keywords.length > 0) {
                 await ensureGlossaryTerms(
                   supabase,
                   result.keywords,
@@ -911,17 +1268,17 @@ Deno.serve(async (req) => {
                   glossaryBudget
                 );
               }
+
+              if (result.is_ai_related) {
+                await assignStoryGroupForItem(
+                  supabase,
+                  { id: item.id, title: item.title, summary: result.summary },
+                  openRouterKey,
+                  openRouterModel
+                );
+              }
+
               itemsSummarized++;
-            } else if (result && result.relevant === false) {
-              // Hide irrelevant content instead of using placeholder summary
-              await supabase
-                .from("feed_items")
-                .update({
-                  hidden: true,
-                  summary_model: openRouterModel,
-                  summarized_at: new Date().toISOString(),
-                })
-                .eq("id", item.id);
             }
           },
           SUMMARY_CONCURRENCY

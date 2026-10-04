@@ -170,6 +170,37 @@ supabase functions deploy keyword-videos --no-verify-jwt
 
 Apply migration `20261003000012_keyword_video_daily_quota.sql` before deploying `keyword-videos` (daily uncached search cap).
 
+**Launch batch (PR #4, apply in order after `20261003000013`):**
+
+1. `20261004000001_feed_story_groups.sql`
+2. `20261004000002_feed_items_is_ai_related.sql`
+3. `20261004000003_subscribers_attribution.sql`
+4. `20261004000004_feed_story_leads_view.sql`
+
+Then redeploy **`ingest`** and **`weekly-recap`**. Backfills (POST + `x-cron-secret`):
+
+```bash
+# Dry-run non-AI classification (returns sample_titles + non_ai_count)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_ai_related","dry_run":true,"limit":40}'
+
+# Regenerate one-line summaries from title + description
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_summaries","limit":40}'
+
+# Merge duplicate coverage (14-day window, chronological)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_story_groups","limit":40}'
+```
+
+**Darwin (Vercel):** enable Web Analytics in the project dashboard; custom `track()` events need Pro.
+
 ### 5. Test Ingestion
 
 Invoke the function manually:

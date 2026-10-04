@@ -9,6 +9,7 @@ import { getFeedRoleFilter, setFeedRoleFilter, type ProfessionalRole } from '../
 import type { FeedItem, SortOption, TrendingKeyword } from '../types'
 import { MobileQuickLinks } from './MobileQuickLinks'
 import { KeywordYoutubeSection } from './KeywordYoutubeSection'
+import { TopStoriesStrip } from './TopStoriesStrip'
 
 function formatLastUpdated(dateString: string): string {
   const date = new Date(dateString)
@@ -169,6 +170,8 @@ export function HomeFeed({ hasWeeklyRecap = false }: { hasWeeklyRecap?: boolean 
               onKeywordSelect={setSelectedKeyword}
               onFeedRoleFilterChange={handleRoleFilterChange}
             />
+
+            {!selectedKeyword && !feedRoleFilter && <TopStoriesStrip />}
 
             <KeywordYoutubeSection keyword={selectedKeyword} />
 

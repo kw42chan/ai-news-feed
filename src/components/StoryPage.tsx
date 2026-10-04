@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, Loader2 } from 'lucide-react'
-import { fetchFeedItemById, fetchRelatedStories } from '../lib/feed'
+import { fetchFeedItemById, fetchRelatedStories, fetchStoryGroupVideos } from '../lib/feed'
+import { trackStoryOpen } from '../lib/analytics'
+import { StoryGroupVideos } from './StoryGroupVideos'
 import { loadGlossary, lookupGlossary } from '../lib/glossary'
 import type { GlossaryEntry } from '../lib/glossary'
 import { formatStoryDate } from '../lib/dates'
@@ -16,6 +18,7 @@ interface StoryPageProps {
 export function StoryPage({ id }: StoryPageProps) {
   const [item, setItem] = useState<FeedItem | null>(null)
   const [related, setRelated] = useState<FeedItem[]>([])
+  const [groupVideos, setGroupVideos] = useState<FeedItem[]>([])
   const [glossary, setGlossary] = useState<Map<string, GlossaryEntry> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -30,8 +33,13 @@ export function StoryPage({ id }: StoryPageProps) {
           return
         }
         document.title = `${story.title} — AI News, Minus the Noise`
-        const more = await fetchRelatedStories(story).catch(() => [])
+        trackStoryOpen(story.id)
+        const [more, group] = await Promise.all([
+          fetchRelatedStories(story).catch(() => []),
+          fetchStoryGroupVideos(story).catch(() => []),
+        ])
         setRelated(more)
+        setGroupVideos(group)
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false))
@@ -118,6 +126,17 @@ export function StoryPage({ id }: StoryPageProps) {
         Watch on YouTube
         <ExternalLink className="w-4 h-4" />
       </a>
+
+      {groupVideos.length > 1 && (
+        <div className="mt-10">
+          <StoryGroupVideos
+            leadId={item.id}
+            videos={groupVideos}
+            videoCount={groupVideos.length}
+            variant="story"
+          />
+        </div>
+      )}
 
       {related.length > 0 && (
         <section className="mt-14 pt-8 border-t border-border" aria-labelledby="related-stories">

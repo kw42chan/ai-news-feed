@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Bookmark, Share2 } from 'lucide-react'
 import { isStorySaved, toggleSavedStory } from '../lib/bookmarks'
 import { getStoryShareUrl, shareStory } from '../lib/share'
+import { trackSave, trackShare } from '../lib/analytics'
 
 interface StoryActionsProps {
   id: string
@@ -33,7 +34,9 @@ export function StoryActions({
     : 'p-2 rounded-md text-meta hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal'
 
   const handleSave = () => {
-    setSaved(toggleSavedStory(id))
+    const next = toggleSavedStory(id)
+    setSaved(next)
+    trackSave(id, next)
     onBookmarkChange?.()
   }
 
@@ -41,6 +44,7 @@ export function StoryActions({
     onShareFallbackUrl?.(null)
     setLocalFallbackUrl(null)
     const result = await shareStory(id, title, summary)
+    trackShare(id)
     if (result === 'copied') {
       setShareHint('Link copied')
       setTimeout(() => setShareHint(null), 2000)
