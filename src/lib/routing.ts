@@ -9,7 +9,7 @@ export type AppRoute =
 function parseRoute(pathname: string): AppRoute {
   if (pathname === '/weekly') return { name: 'weekly' }
   if (pathname === '/saved') return { name: 'saved' }
-  const storyMatch = pathname.match(/^\/story\/([0-9a-f-]{36})$/i)
+  const storyMatch = pathname.match(/^\/story\/([^/]+)$/)
   if (storyMatch) return { name: 'story', id: storyMatch[1] }
   return { name: 'home' }
 }
