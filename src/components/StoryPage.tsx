@@ -96,7 +96,7 @@ export function StoryPage({ id }: StoryPageProps) {
   }
 
   const keywords = item.keywords?.length ? item.keywords : item.tags.slice(0, 3)
-  const { heading, youtubeTitle } = storyPageTitles(item)
+  const { heading } = storyPageTitles(item)
   const videoCount = groupVideos.length
   const updatedLabel = formatRelativeUpdated(item.updated_at || item.published_at)
   const roles = item.roles?.length ? item.roles : []
@@ -130,7 +130,6 @@ export function StoryPage({ id }: StoryPageProps) {
           </div>
 
           <h1 className="story-headline">{heading}</h1>
-          {youtubeTitle && <p className="story-youtube-title">{youtubeTitle}</p>}
 
           {item.summary && (
             <section className="story-summary" aria-label="Plain-English summary">
