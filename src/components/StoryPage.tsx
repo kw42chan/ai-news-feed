@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, Lightbulb, Loader2, User } from 'lucide-react'
+import { ArrowLeft, Check, Lightbulb, Loader2, Sparkles, User } from 'lucide-react'
 import { fetchFeedItemById, fetchRelatedStories, fetchStoryGroupVideos } from '../lib/feed'
 import { trackStoryOpen } from '../lib/analytics'
 import { loadGlossary, lookupGlossary } from '../lib/glossary'
@@ -12,6 +12,7 @@ import { storyPageTitles } from '../lib/headline'
 import { StoryCountPill } from './StoryGroupVideos'
 import { StoryPageVideos } from './StoryPageVideos'
 import { SignupBox } from './SignupBox'
+import { getStoryPageDemoPayload, STORY_PAGE_DEMO_ID } from '../lib/storyPageDemo'
 
 interface StoryPageProps {
   id: string
@@ -41,6 +42,17 @@ export function StoryPage({ id }: StoryPageProps) {
   const [shareFallbackUrl, setShareFallbackUrl] = useState<string | null>(null)
 
   useEffect(() => {
+    if (id === STORY_PAGE_DEMO_ID) {
+      const demo = getStoryPageDemoPayload()
+      setItem(demo.item)
+      setGroupVideos(demo.groupVideos)
+      setGlossary(new Map())
+      setRelated([])
+      document.title = `${demo.item.headline ?? demo.item.title} — AI News, Minus the Noise`
+      setLoading(false)
+      return
+    }
+
     Promise.all([fetchFeedItemById(id), loadGlossary().catch(() => new Map())])
       .then(async ([story, map]) => {
         setItem(story)
@@ -120,7 +132,15 @@ export function StoryPage({ id }: StoryPageProps) {
           <h1 className="story-headline">{heading}</h1>
           {youtubeTitle && <p className="story-youtube-title">{youtubeTitle}</p>}
 
-          {item.summary && <p className="story-lede">{item.summary}</p>}
+          {item.summary && (
+            <section className="story-summary" aria-label="Plain-English summary">
+              <p className="story-summary-label">
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                In plain English
+              </p>
+              <p className="story-lede">{item.summary}</p>
+            </section>
+          )}
 
           <div className="story-toolbar">
             {roles.length > 0 && (
