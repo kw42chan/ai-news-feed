@@ -150,14 +150,96 @@ Before running the cron migration, add these secrets to Vault:
 -- In Supabase SQL Editor
 SELECT vault.create_secret('https://gmfzwuunaqzutbhudsxn.supabase.co', 'SUPABASE_URL');
 SELECT vault.create_secret('your-anon-key', 'SUPABASE_ANON_KEY');
+SELECT vault.create_secret('sb_publishable_...', 'SUPABASE_PUBLISHABLE_KEY');
 SELECT vault.create_secret('your-openrouter-api-key', 'OPENROUTER_API_KEY');
 ```
 
-### 4. Deploy Edge Function
+### 4. Deploy Edge Functions
 
 ```bash
 supabase functions deploy ingest --verify-jwt
 ```
+
+**`keyword-videos` (YouTube discovery for trending chips):** JWT verification must be **off** at the gateway (publishable keys are not JWTs). The function validates the `apikey` header against **`SUPABASE_PUBLISHABLE_KEY`** (same value as `VITE_SUPABASE_PUBLISHABLE_KEY` on Vercel) **or** legacy **`SUPABASE_ANON_KEY`** (function env or Vault). Deploy with:
+
+```bash
+supabase functions deploy keyword-videos --no-verify-jwt
+```
+
+(`supabase/config.toml` sets `[functions.keyword-videos] verify_jwt = false` for local CLI deploys.)
+
+Apply migration `20261003000012_keyword_video_daily_quota.sql` before deploying `keyword-videos` (daily uncached search cap).
+
+**Launch batch (PR #4, apply in order after `20261003000013`):**
+
+1. `20261004000001_feed_story_groups.sql`
+2. `20261004000002_feed_items_is_ai_related.sql`
+3. `20261004000003_subscribers_attribution.sql`
+4. `20261004000004_feed_story_leads_view.sql`
+5. `20261004000005_feed_items_backfill_markers.sql`
+6. `20261004000006_feed_items_headline.sql` (adds `headline`, `headline_attempts`, recreates `feed_story_leads`)
+
+Then redeploy **`ingest`** and **`weekly-recap`**. Backfills (POST + `x-cron-secret`; repeat each until `remaining` is 0):
+
+```bash
+# 1) Dry-run AI classification (optional; does not write markers)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_ai_related","dry_run":true,"limit":40}'
+
+# 2) Classify + regenerate summaries/keywords (sets ai_classified_at + summary_regenerated_at; hides non-AI)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_ai_related","limit":40}'
+
+# 3) Optional: summary-only regen for rows not touched by step 2 (usually skip if step 2 completed)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_summaries","limit":40}'
+
+# 4) Story grouping (±72h window per item; incremental via story_grouped_at)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_story_groups","limit":40}'
+
+# 5) Plain-English headlines (oldest first; singles + group leads only)
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_headlines","limit":40}'
+```
+
+**Re-run story grouping from scratch** (after tightening match rules; no new migration):
+
+```sql
+UPDATE public.feed_items
+SET story_group_id = NULL, is_story_lead = true, story_grouped_at = NULL
+WHERE source = 'youtube';
+```
+
+Or via ingest (`dry_run` reports how many rows would be reset):
+
+```bash
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_reset_story_groups","dry_run":true}'
+
+curl -X POST "$SUPABASE_URL/functions/v1/ingest" \
+  -H "x-cron-secret: $INGEST_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"backfill_reset_story_groups"}'
+```
+
+Then repeat step 4 (`backfill_story_groups`) until `remaining` is 0.
+
+**Post-bef6085 quality fixes:** redeploy **`ingest` only** (stricter story matching, root-lead chaining, `story_grouped_at` on ingest grouping, keyword prompt/filter, YouTube RSS→Data API fallback). Ensure `YOUTUBE_API_KEY` is in Vault (same key as `keyword-videos`).
+
+**Darwin (Vercel):** enable Web Analytics in the project dashboard; custom `track()` events need Pro.
 
 ### 5. Test Ingestion
 

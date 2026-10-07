@@ -26,3 +26,6 @@ site_url = "http://localhost:3000"
 
 [functions]
 verify_jwt = true
+
+[functions.keyword-videos]
+verify_jwt = false
