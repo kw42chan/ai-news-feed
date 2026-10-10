@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-vl-32b-instruct";
+const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3.7-plus";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
