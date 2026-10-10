@@ -17,7 +17,7 @@ const GLOSSARY_TIMEOUT_MS = 8000;
 
 // Default model: qwen works globally; Google/OpenAI models may return 403 in some regions (e.g. Hong Kong)
 // Override via OPENROUTER_MODEL Vault secret
-const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-vl-32b-instruct";
+const DEFAULT_OPENROUTER_MODEL = "qwen/qwen3.7-plus";
 
 const PROFESSIONAL_ROLES = [
   "Marketing",

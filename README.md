@@ -43,7 +43,7 @@ A curated AI news feed for non-technical professionals who want to keep up with 
 
 - **Frontend:** Vite + React + TypeScript + Tailwind CSS 4 + Lucide React
 - **Backend:** Supabase (PostgreSQL + Edge Functions + pg_cron)
-- **AI:** OpenRouter (configurable model, default: `qwen/qwen3-vl-32b-instruct`)
+- **AI:** OpenRouter (configurable model, default: `qwen/qwen3.7-plus`)
 - **Hosting:** Vercel (frontend), Supabase (backend)
 
 ## Local Development
@@ -106,7 +106,7 @@ These are stored in Supabase Vault and accessed by the Edge Function:
 
 ### OpenRouter Model Selection
 
-The default model is `qwen/qwen3-vl-32b-instruct`, which works globally.
+The default model is `qwen/qwen3.7-plus`, which works globally. (The previous default `qwen/qwen3-vl-32b-instruct` was deprecated on OpenRouter in October 2025.)
 
 **Regional Caveat:** Google and OpenAI models on OpenRouter may return HTTP 403 (Terms of Service violation) when called from certain regions, including Hong Kong and other locations where Supabase Edge Functions may run. If you encounter 403 errors:
 
@@ -115,7 +115,7 @@ The default model is `qwen/qwen3-vl-32b-instruct`, which works globally.
 3. Override the default by adding `OPENROUTER_MODEL` to Vault:
 
 ```sql
-SELECT vault.create_secret('qwen/qwen3-vl-32b-instruct', 'OPENROUTER_MODEL');
+SELECT vault.create_secret('qwen/qwen3.7-plus', 'OPENROUTER_MODEL');
 -- Or use another model like 'anthropic/claude-3-haiku', 'mistralai/mistral-small', etc.
 ```
 
